@@ -1,13 +1,30 @@
-import express, { json } from 'express';
-import { config } from 'dotenv';
-const app = express();
+
+import express from "express";
+import { config } from "dotenv";
+import departmentRoutes from "./routes/department.routes.js";
+import errorMiddleware from "./middleware/error.middleware.js";
+import AppError from "./utils/appError.js";
 
 config();
 
+const app = express();
+
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+/* ROUTES */
+app.use("/api/v1/departments", departmentRoutes);
 
 app.get("/ping", (_req, res) => {
-    res.send('pong');
+  res.send("pong");
 });
+
+/* ❗ UNKNOWN ROUTES (NO '*') */
+app.use((req, res, next) => {
+  next(new AppError(`Route ${req.originalUrl} not found`, 404));
+});
+
+/* ❗ GLOBAL ERROR HANDLER (ALWAYS LAST) */
+app.use(errorMiddleware);
 
 export default app;
