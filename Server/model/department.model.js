@@ -52,3 +52,20 @@ export const deleteDepartment = async (id) => {
   );
   return result.affectedRows;
 };
+
+export const restoreDepartment = async (depart_id) => {
+  const [result] = await pool.query(
+    "UPDATE department SET is_deleted = 0 WHERE depart_id = ? AND is_deleted = 1",
+    [depart_id]
+  );
+  return result.affectedRows;
+};
+
+
+export const getDeletedDepartments = async () => {
+  const [rows] = await pool.query(
+    "SELECT depart_id, department_code, name FROM department WHERE is_deleted = 1"
+  );
+  return rows;
+};
+

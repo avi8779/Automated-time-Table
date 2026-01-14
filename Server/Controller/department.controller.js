@@ -94,3 +94,32 @@ export const deleteDepartment = asyncHandler(async (req, res) => {
   });
 });
 
+
+export const restoreDepartment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const restored = await departmentModel.restoreDepartment(id);
+
+  if (restored === 0) {
+    throw new AppError("Department not found or already active", 404);
+  }
+
+  res.json({
+    success: true,
+    message: "Department restored successfully"
+  });
+});
+
+
+export const getDeletedDepartments = asyncHandler(async (_req, res) => {
+  const departments = await departmentModel.getDeletedDepartments();
+
+  res.json({
+    success: true,
+    count: departments.length,
+    data: departments
+  });
+});
+
+
+
