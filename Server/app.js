@@ -7,6 +7,8 @@ import AppError from "./utils/appError.js";
 import courseRoutes from "./routes/course.route.js";
 import teacherRoutes from "./routes/teacher.route.js";
 import subjectRoutes  from "./model/subject.model.js";
+import teacherSubjectRoutes from "./routes/teacherSubject.routes.js";
+
 
 config();
 
@@ -20,6 +22,7 @@ app.use("/api/v1/departments", departmentRoutes);
 app.use("/api/v1/courses",courseRoutes);
 app.use("/api/v1/teachers", teacherRoutes);
 app.use("/api/v1/subjects/", subjectRoutes);
+app.use("api/v1/teacher-Subjects", teacherSubjectRoutes)
 
 app.get("/ping", (_req, res) => {
   res.send("pong");
