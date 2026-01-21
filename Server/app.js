@@ -5,7 +5,8 @@ import departmentRoutes from "./routes/department.routes.js";
 import errorMiddleware from "./middleware/error.middleware.js";
 import AppError from "./utils/appError.js";
 import courseRoutes from "./routes/course.route.js";
-import teacherRoutes from "./routes/teacher.route.js"
+import teacherRoutes from "./routes/teacher.route.js";
+import subjectRoutes  from "./model/subject.model.js";
 
 config();
 
@@ -18,6 +19,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/v1/departments", departmentRoutes);
 app.use("/api/v1/courses",courseRoutes);
 app.use("/api/v1/teachers", teacherRoutes);
+app.use("/api/v1/subjects/", subjectRoutes);
 
 app.get("/ping", (_req, res) => {
   res.send("pong");
