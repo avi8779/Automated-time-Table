@@ -6,8 +6,9 @@ import errorMiddleware from "./middleware/error.middleware.js";
 import AppError from "./utils/appError.js";
 import courseRoutes from "./routes/course.route.js";
 import teacherRoutes from "./routes/teacher.route.js";
-import subjectRoutes  from "./model/subject.model.js";
+import subjectRoutes  from "./routes/subject.route.js";
 import teacherSubjectRoutes from "./routes/teacherSubject.routes.js";
+import sectionRoutes from "./routes/section.route.js";
 
 
 config();
@@ -22,7 +23,8 @@ app.use("/api/v1/departments", departmentRoutes);
 app.use("/api/v1/courses",courseRoutes);
 app.use("/api/v1/teachers", teacherRoutes);
 app.use("/api/v1/subjects/", subjectRoutes);
-app.use("api/v1/teacher-Subjects", teacherSubjectRoutes)
+app.use("api/v1/teacher-Subjects", teacherSubjectRoutes);
+app.use("api/v1/sections", sectionRoutes);
 
 app.get("/ping", (_req, res) => {
   res.send("pong");
