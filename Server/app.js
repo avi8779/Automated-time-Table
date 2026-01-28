@@ -9,6 +9,7 @@ import teacherRoutes from "./routes/teacher.route.js";
 import subjectRoutes  from "./routes/subject.route.js";
 import teacherSubjectRoutes from "./routes/teacherSubject.routes.js";
 import sectionRoutes from "./routes/section.route.js";
+import timeSlotsRoutes from "./routes/timeSlots.routes.js"
 
 
 config();
@@ -25,6 +26,7 @@ app.use("/api/v1/teachers", teacherRoutes);
 app.use("/api/v1/subjects/", subjectRoutes);
 app.use("api/v1/teacher-Subjects", teacherSubjectRoutes);
 app.use("api/v1/sections", sectionRoutes);
+app.use("api/v1/time-slots", timeSlotsRoutes);
 
 app.get("/ping", (_req, res) => {
   res.send("pong");
