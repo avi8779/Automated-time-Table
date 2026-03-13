@@ -1,6 +1,7 @@
 import { pool } from "../config/dbConn.js";
 
-/* helpers */
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 export const subjectCodeExists = async (subject_code) => {
   const [rows] = await pool.query(
     "SELECT subject_id FROM subjects WHERE subject_code = ? AND is_deleted = 0",
@@ -17,95 +18,102 @@ export const courseExistsById = async (course_id) => {
   return rows.length > 0;
 };
 
-export const departmentExistsById = async (depart_id) => {
+export const subjectExistsById = async (subject_id) => {
   const [rows] = await pool.query(
-    "SELECT depart_id FROM department WHERE depart_id = ? AND is_deleted = 0",
-    [depart_id]
+    "SELECT subject_id FROM subjects WHERE subject_id = ? AND is_deleted = 0",
+    [subject_id]
   );
   return rows.length > 0;
 };
 
-/* create */
+// ── CREATE ────────────────────────────────────────────────────────────────────
+
 export const createSubject = async (data) => {
   const {
     subject_code,
-    name,
+    subject_name,
     course_id,
-    depart_id,
+    semester,
     weekly_hours,
-    is_lab
+    credits,
+    is_lab,
+    preferred_slot,
+    status,
   } = data;
 
   const [result] = await pool.query(
     `INSERT INTO subjects
-     (subject_code, name, course_id, depart_id, weekly_hours, is_lab)
-     VALUES (?,?,?,?,?,?)`,
-    [subject_code, name, course_id, depart_id, weekly_hours, is_lab]
+     (subject_code, subject_name, course_id, semester, weekly_hours, credits, is_lab, preferred_slot, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [subject_code, subject_name, course_id, semester, weekly_hours, credits, is_lab, preferred_slot, status]
   );
 
   return result.insertId;
 };
 
-/* get all */
+// ── READ ──────────────────────────────────────────────────────────────────────
+
 export const getAllSubjects = async () => {
   const [rows] = await pool.query(
-    `SELECT 
+    `SELECT
        s.subject_id,
        s.subject_code,
-       s.name,
+       s.subject_name,
+       s.semester,
        s.weekly_hours,
+       s.credits,
        s.is_lab,
-       c.course_name,
-       d.name AS department_name
+       s.preferred_slot,
+       s.status,
+       c.course_name
      FROM subjects s
      JOIN courses c ON c.course_id = s.course_id
-     JOIN department d ON d.depart_id = s.depart_id
-     WHERE s.is_deleted = 0`
+     WHERE s.is_deleted = 0
+     ORDER BY s.subject_id ASC`
   );
   return rows;
 };
 
-/* get one */
 export const getSubjectById = async (subject_id) => {
   const [rows] = await pool.query(
-    `SELECT * FROM subjects 
-     WHERE subject_id = ? AND is_deleted = 0`,
+    "SELECT * FROM subjects WHERE subject_id = ? AND is_deleted = 0",
     [subject_id]
   );
   return rows[0];
 };
 
-/* update */
+// ── UPDATE ────────────────────────────────────────────────────────────────────
+
 export const updateSubject = async (subject_id, data) => {
   const {
     subject_code,
-    name,
+    subject_name,
     course_id,
-    depart_id,
+    semester,
     weekly_hours,
-    is_lab
+    credits,
+    is_lab,
+    preferred_slot,
+    status,
   } = data;
 
   const [result] = await pool.query(
     `UPDATE subjects
-     SET subject_code = ?, name = ?, course_id = ?, depart_id = ?,
-         weekly_hours = ?, is_lab = ?
+     SET subject_code = ?, subject_name = ?, course_id = ?, semester = ?,
+         weekly_hours = ?, credits = ?, is_lab = ?, preferred_slot = ?, status = ?
      WHERE subject_id = ? AND is_deleted = 0`,
     [
-      subject_code,
-      name,
-      course_id,
-      depart_id,
-      weekly_hours,
-      is_lab,
-      subject_id
+      subject_code, subject_name, course_id, semester,
+      weekly_hours, credits, is_lab, preferred_slot, status,
+      subject_id,
     ]
   );
 
   return result.affectedRows;
 };
 
-/* soft delete */
+// ── DELETE (soft) ─────────────────────────────────────────────────────────────
+
 export const softDeleteSubject = async (subject_id) => {
   const [result] = await pool.query(
     "UPDATE subjects SET is_deleted = 1 WHERE subject_id = ? AND is_deleted = 0",

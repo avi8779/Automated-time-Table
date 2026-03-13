@@ -1,89 +1,94 @@
-import asyncHandler from "../middleware/asyncHandler.middleware.js";
-import AppError from "../utils/appError.js";
-import * as sectionModel from "../model/section.model.js";
+import {
+  sectionNameExists,
+  courseExistsById,
+  createSection,
+  getAllSections,
+  getSectionById,
+  updateSection,
+  softDeleteSection
+} from "../model/section.model.js";
 
-/* create */
-export const createSection = asyncHandler(async (req, res) => {
-  const { section_code, name, course_id, year, strength } = req.body;
+/* ===================== CREATE ===================== */
+export const createSectionController = async (req, res) => {
+  try {
+    const { section_name, course_id, semester, strength, batch_year, status } = req.body;
 
-  if (!section_code || !name || !course_id || !year || !strength) {
-    throw new AppError("All fields are required", 400);
+    if (!section_name || !course_id || !semester || !strength || !batch_year || !status) {
+      return res.status(400).json({ success: false, message: "All fields are required" });
+    }
+
+    if (await sectionNameExists(section_name)) {
+      return res.status(409).json({ success: false, message: "Section already exists" });
+    }
+
+    if (!(await courseExistsById(course_id))) {
+      return res.status(404).json({ success: false, message: "Course not found" });
+    }
+
+    const section_id = await createSection({ section_name, course_id, semester, strength, batch_year, status });
+
+    res.status(201).json({ success: true, message: "Section created successfully", section_id });
+  } catch (error) {
+    console.error("Create Section Error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
+};
 
-  if (year < 1 || year > 5) {
-    throw new AppError("Invalid academic year", 400);
+/* ===================== GET ALL ===================== */
+export const getAllSectionsController = async (req, res) => {
+  try {
+    const sections = await getAllSections();
+    // ✅ was: res.json(sections)  →  frontend reads res.data.data which was undefined
+    res.status(200).json({ success: true, data: sections });
+  } catch (error) {
+    console.error("Get Sections Error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
+};
 
-  if (strength < 1 || strength > 200) {
-    throw new AppError("Invalid section strength", 400);
+/* ===================== GET BY ID ===================== */
+export const getSectionByIdController = async (req, res) => {
+  try {
+    const section = await getSectionById(req.params.id);
+    if (!section) return res.status(404).json({ success: false, message: "Section not found" });
+    res.status(200).json({ success: true, data: section });
+  } catch (error) {
+    console.error("Get Section Error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
+};
 
-  if (await sectionModel.sectionCodeExists(section_code)) {
-    throw new AppError("Section code already exists", 409);
+/* ===================== UPDATE ===================== */
+export const updateSectionController = async (req, res) => {
+  try {
+    const { section_name, course_id, semester, strength, batch_year, status } = req.body;
+
+    if (!section_name || !course_id || !semester || !strength || !batch_year || !status) {
+      return res.status(400).json({ success: false, message: "All fields are required" });
+    }
+
+    if (!(await courseExistsById(course_id))) {
+      return res.status(404).json({ success: false, message: "Course not found" });
+    }
+
+    const affectedRows = await updateSection(req.params.id, { section_name, course_id, semester, strength, batch_year, status });
+    if (!affectedRows) return res.status(404).json({ success: false, message: "Section not found" });
+
+    res.status(200).json({ success: true, message: "Section updated successfully" });
+  } catch (error) {
+    console.error("Update Section Error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
+};
 
-  if (!(await sectionModel.courseExistsById(course_id))) {
-    throw new AppError("Course not found", 404);
+/* ===================== DELETE ===================== */
+export const deleteSectionController = async (req, res) => {
+  try {
+    const affectedRows = await softDeleteSection(req.params.id);
+    if (!affectedRows) return res.status(404).json({ success: false, message: "Section not found" });
+    res.status(200).json({ success: true, message: "Section deleted successfully" });
+  } catch (error) {
+    console.error("Delete Section Error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
-
-  const sectionId = await sectionModel.createSection(req.body);
-
-  res.status(201).json({
-    success: true,
-    message: "Section created successfully",
-    section_id: sectionId
-  });
-});
-
-/* get all */
-export const getAllSections = asyncHandler(async (_req, res) => {
-  const sections = await sectionModel.getAllSections();
-
-  res.json({
-    success: true,
-    count: sections.length,
-    data: sections
-  });
-});
-
-/* get one */
-export const getSectionById = asyncHandler(async (req, res) => {
-  const section = await sectionModel.getSectionById(req.params.id);
-
-  if (!section) {
-    throw new AppError("Section not found", 404);
-  }
-
-  res.json({
-    success: true,
-    data: section
-  });
-});
-
-/* update */
-export const updateSection = asyncHandler(async (req, res) => {
-  const updated = await sectionModel.updateSection(req.params.id, req.body);
-
-  if (updated === 0) {
-    throw new AppError("Section not found or update failed", 404);
-  }
-
-  res.json({
-    success: true,
-    message: "Section updated successfully"
-  });
-});
-
-/* delete */
-export const deleteSection = asyncHandler(async (req, res) => {
-  const deleted = await sectionModel.softDeleteSection(req.params.id);
-
-  if (deleted === 0) {
-    throw new AppError("Section not found or already deleted", 404);
-  }
-
-  res.json({
-    success: true,
-    message: "Section deleted successfully"
-  });
-});
+};

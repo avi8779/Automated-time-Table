@@ -1,9 +1,11 @@
 import { pool } from "../config/dbConn.js";
 
-export const roomCodeExists = async (room_code) => {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+export const roomNoExists = async (room_no) => {
   const [rows] = await pool.query(
-    "SELECT room_id FROM rooms WHERE room_code = ? AND is_deleted = 0",
-    [room_code]
+    "SELECT room_id FROM rooms WHERE room_no = ? AND is_deleted = 0",
+    [room_no]
   );
   return rows.length > 0;
 };
@@ -16,30 +18,112 @@ export const buildingExistsById = async (building_id) => {
   return rows.length > 0;
 };
 
+export const roomExistsById = async (room_id) => {
+  const [rows] = await pool.query(
+    "SELECT room_id FROM rooms WHERE room_id = ? AND is_deleted = 0",
+    [room_id]
+  );
+  return rows.length > 0;
+};
+
+// ── CREATE ────────────────────────────────────────────────────────────────────
+
 export const createRoom = async (data) => {
-  const { room_code, building_id, capacity, room_type } = data;
+  const {
+    room_no,
+    building_id,
+    capacity,
+    room_type,
+    floor_no,
+    status,
+    has_projector,
+    has_ac,
+  } = data;
 
   const [result] = await pool.query(
     `INSERT INTO rooms
-     (room_code, building_id, capacity, room_type)
-     VALUES (?,?,?,?)`,
-    [room_code, building_id, capacity, room_type]
+     (room_no, building_id, capacity, room_type, floor_no, status, has_projector, has_ac)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [room_no, building_id, capacity, room_type, floor_no, status, has_projector, has_ac]
   );
 
   return result.insertId;
 };
 
+// ── READ ──────────────────────────────────────────────────────────────────────
+
 export const getAllRooms = async () => {
   const [rows] = await pool.query(
-    `SELECT 
+    `SELECT
        r.room_id,
-       r.room_code,
+       r.room_no,
        r.capacity,
        r.room_type,
-       b.name AS building_name
+       r.floor_no,
+       r.status,
+       r.has_projector,
+       r.has_ac,
+       b.building_name
      FROM rooms r
      JOIN buildings b ON b.building_id = r.building_id
-     WHERE r.is_deleted = 0`
+     WHERE r.is_deleted = 0
+     ORDER BY r.room_id ASC`
   );
   return rows;
+};
+
+export const getRoomById = async (room_id) => {
+  const [rows] = await pool.query(
+    `SELECT
+       r.room_id,
+       r.room_no,
+       r.building_id,
+       r.capacity,
+       r.room_type,
+       r.floor_no,
+       r.status,
+       r.has_projector,
+       r.has_ac,
+       b.building_name
+     FROM rooms r
+     JOIN buildings b ON b.building_id = r.building_id
+     WHERE r.room_id = ? AND r.is_deleted = 0`,
+    [room_id]
+  );
+  return rows[0];
+};
+
+// ── UPDATE ────────────────────────────────────────────────────────────────────
+
+export const updateRoom = async (room_id, data) => {
+  const {
+    room_no,
+    building_id,
+    capacity,
+    room_type,
+    floor_no,
+    status,
+    has_projector,
+    has_ac,
+  } = data;
+
+  const [result] = await pool.query(
+    `UPDATE rooms
+     SET room_no = ?, building_id = ?, capacity = ?, room_type = ?,
+         floor_no = ?, status = ?, has_projector = ?, has_ac = ?
+     WHERE room_id = ? AND is_deleted = 0`,
+    [room_no, building_id, capacity, room_type, floor_no, status, has_projector, has_ac, room_id]
+  );
+
+  return result.affectedRows;
+};
+
+// ── DELETE (soft) ─────────────────────────────────────────────────────────────
+
+export const softDeleteRoom = async (room_id) => {
+  const [result] = await pool.query(
+    "UPDATE rooms SET is_deleted = 1 WHERE room_id = ? AND is_deleted = 0",
+    [room_id]
+  );
+  return result.affectedRows;
 };
