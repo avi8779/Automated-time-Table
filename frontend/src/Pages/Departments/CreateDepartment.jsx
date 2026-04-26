@@ -20,7 +20,7 @@ function CreateDepartment() {
       createAction={createItem}
       updateAction={updateItem}
       deleteAction={deleteItem}
-      idKey="department_id"
+      idKey="depart_id"
       validate={validateDepartment}
       columns={[
         { header: "Code", accessor: "department_code" },

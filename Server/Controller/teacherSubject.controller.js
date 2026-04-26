@@ -1,64 +1,63 @@
-import asyncHandler from "../middleware/asyncHandler.middleware.js";
-import AppError from "../utils/appError.js";
-import * as tsModel from "../model/teacherSubject.model.js";
+import {
+  getSubjectsByTeacher,
+  getAllMappings,
+  createMapping,
+  softDeleteMapping,
+} from "../model/teacherSubject.model.js";
 
-/* GET all mappings */
-export const getAllMappings = asyncHandler(async (_req, res) => {
-  const data = await tsModel.getAllMappings();
-  res.json({ success: true, count: data.length, data });
-});
-
-/* POST - assign subject to teacher */
-export const assignSubjectToTeacher = asyncHandler(async (req, res) => {
-  const { teacher_id, subject_id } = req.body;
-
-  if (!teacher_id || !subject_id) {
-    throw new AppError("teacher_id and subject_id are required", 400);
+/* GET /api/v1/teacher-subjects */
+export const getAllMappingsController = async (req, res) => {
+  try {
+    const rows = await getAllMappings();
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
+};
 
-  if (!(await tsModel.teacherExistsById(teacher_id))) {
-    throw new AppError("Teacher not found", 404);
+/* GET /api/v1/teacher-subjects/teacher/:teacher_id */
+export const getSubjectsByTeacherController = async (req, res) => {
+  try {
+    const rows = await getSubjectsByTeacher(req.params.teacher_id);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
+};
 
-  if (!(await tsModel.subjectExistsById(subject_id))) {
-    throw new AppError("Subject not found", 404);
+/* POST /api/v1/teacher-subjects */
+export const assignSubjectController = async (req, res) => {
+  try {
+    const { teacher_id, subject_id, section_id, priority, can_substitute } = req.body;
+    if (!teacher_id || !subject_id)
+      return res.status(400).json({ success: false, message: "teacher_id and subject_id are required" });
+
+    await createMapping({ teacher_id, subject_id, section_id, priority, can_substitute });
+    res.status(201).json({ success: true, message: "Assignment created successfully" });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY")
+      return res.status(409).json({ success: false, message: "This mapping already exists" });
+    res.status(500).json({ success: false, message: err.message });
   }
+};
 
-  if (await tsModel.mappingExists(teacher_id, subject_id)) {
-    throw new AppError("Teacher already assigned to this subject", 409);
+/* DELETE /api/v1/teacher-subjects/:teacher_id/:subject_id/:section_id? */
+export const removeTeacherSubjectController = async (req, res) => {
+  try {
+    const { teacher_id, subject_id } = req.params;
+    const section_id = req.params.section_id || req.query.section_id || null;
+
+    const affected = await softDeleteMapping({
+      teacher_id: Number(teacher_id),
+      subject_id: Number(subject_id),
+      section_id: section_id ? Number(section_id) : null,
+    });
+
+    if (!affected)
+      return res.status(404).json({ success: false, message: "Mapping not found" });
+
+    res.json({ success: true, message: "Assignment removed" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  await tsModel.createMapping(teacher_id, subject_id);
-
-  res.status(201).json({
-    success: true,
-    message: "Subject assigned to teacher",
-  });
-});
-
-/* GET subjects by teacher */
-export const getSubjectsByTeacher = asyncHandler(async (req, res) => {
-  const { teacher_id } = req.params;
-  const subjects = await tsModel.getSubjectsByTeacher(teacher_id);
-  res.json({ success: true, count: subjects.length, data: subjects });
-});
-
-/* GET teachers by subject */
-export const getTeachersBySubject = asyncHandler(async (req, res) => {
-  const { subject_id } = req.params;
-  const teachers = await tsModel.getTeachersBySubject(subject_id);
-  res.json({ success: true, count: teachers.length, data: teachers });
-});
-
-/* DELETE mapping by teacher_id + subject_id */
-export const removeTeacherSubject = asyncHandler(async (req, res) => {
-  const { teacher_id, subject_id } = req.params;
-
-  const removed = await tsModel.softDeleteMapping(teacher_id, subject_id);
-
-  if (removed === 0) {
-    throw new AppError("Mapping not found or already removed", 404);
-  }
-
-  res.json({ success: true, message: "Teacher-subject mapping removed" });
-});
+};

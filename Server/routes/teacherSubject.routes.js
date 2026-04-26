@@ -1,18 +1,17 @@
 import { Router } from "express";
 import {
-  assignSubjectToTeacher,
-  getAllMappings,
-  getSubjectsByTeacher,
-  getTeachersBySubject,
-  removeTeacherSubject,
+  getAllMappingsController,
+  getSubjectsByTeacherController,
+  assignSubjectController,
+  removeTeacherSubjectController,
 } from "../Controller/teacherSubject.controller.js";
 
 const router = Router();
 
-router.get("/",                         getAllMappings);
-router.post("/",                        assignSubjectToTeacher);
-router.get("/teacher/:teacher_id",      getSubjectsByTeacher);
-router.get("/subject/:subject_id",      getTeachersBySubject);
-router.delete("/:teacher_id/:subject_id", removeTeacherSubject);
+router.get("/",                            getAllMappingsController);
+router.get("/teacher/:teacher_id",         getSubjectsByTeacherController);
+router.post("/",                           assignSubjectController);
+router.delete("/:teacher_id/:subject_id",              removeTeacherSubjectController);
+router.delete("/:teacher_id/:subject_id/:section_id",  removeTeacherSubjectController);
 
 export default router;

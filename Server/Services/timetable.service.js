@@ -6,9 +6,11 @@ import { pool } from "../config/dbConn.js";
 
 const getAvailableSlots = async () => {
   const [rows] = await pool.query(
-    `SELECT slot_id, day, slot_order, start_time, end_time
+   
+    `SELECT MIN(slot_id) AS slot_id, day, slot_order, start_time, end_time
      FROM time_slots
      WHERE is_break = 0 AND status = 'ACTIVE'
+     GROUP BY day, slot_order, start_time, end_time
      ORDER BY day, slot_order`
   );
   return rows;
@@ -47,15 +49,19 @@ const getSubjectsBySection = async (course_id, semester) => {
   return rows;
 };
 
-const getTeachersForSubject = async (subject_id) => {
+const getTeachersForSubject = async (subject_id, section_id) => {
   const [rows] = await pool.query(
-    `SELECT t.teacher_id, t.name, t.max_hours_per_day, t.max_hours_per_week
+    `SELECT t.teacher_id, t.name, t.max_hours_per_day, t.max_hours_per_week,
+            ts.priority,
+            CASE WHEN ts.section_id = ? THEN 1 ELSE 2 END AS specificity
      FROM teacher_subject ts
      JOIN teachers t ON t.teacher_id = ts.teacher_id
      WHERE ts.subject_id = ?
+       AND (ts.section_id = ? OR ts.section_id IS NULL)
        AND ts.is_deleted  = 0
-       AND t.is_deleted   = 0`,
-    [subject_id]
+       AND t.is_deleted   = 0
+     ORDER BY specificity, ts.priority`,
+    [section_id, subject_id, section_id]
   );
   return rows;
 };
@@ -85,18 +91,17 @@ const shuffle = (arr) => {
 
 const DAY_ORDER = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-/* Returns the next calendar date (YYYY-MM-DD) for a given day name.
-   e.g. if today is Wednesday and day="MON", returns next Monday's date. */
 const DAY_TO_ISO = { MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6, SUN: 0 };
+
 const nextDateForDay = (dayName) => {
-  const today   = new Date();
-  const todayDow = today.getDay();                  // 0=Sun … 6=Sat
+  const today    = new Date();
+  const todayDow = today.getDay();
   const target   = DAY_TO_ISO[dayName] ?? 1;
   let diff = target - todayDow;
-  if (diff <= 0) diff += 7;                         // always next occurrence
+  if (diff < 0) diff += 7;
   const next = new Date(today);
   next.setDate(today.getDate() + diff);
-  return next.toISOString().slice(0, 10);           // "YYYY-MM-DD"
+  return next.toISOString().slice(0, 10);
 };
 
 /* ===========================
@@ -116,47 +121,55 @@ export const generateTimetable = async () => {
     if (!sections.length) throw new Error("No active sections found");
     if (!slots.length)    throw new Error("No active time slots found");
 
-    // Group slots by day, sorted morning → afternoon
-    const slotsByDay = {};
+    
+    const isConsecutiveSlot = (a, b) => {
+      if (!a || !b) return false;
+      const endA   = new Date(`1970-01-01T${a.end_time}`);
+      const startB = new Date(`1970-01-01T${b.start_time}`);
+      const diff   = (startB - endA) / (1000 * 60);
+      return diff >= 0 && diff <= 15;
+    };
+
+    
+    const deduplicatedSlots = [];
+    const seenSlotKey = new Set();
     for (const slot of slots) {
+      const key = `${slot.day}_${slot.slot_order}`;
+      if (!seenSlotKey.has(key)) {
+        seenSlotKey.add(key);
+        deduplicatedSlots.push(slot);
+      }
+    }
+
+    // Group deduplicated slots by day
+    const slotsByDay = {};
+    for (const slot of deduplicatedSlots) {
       if (!slotsByDay[slot.day]) slotsByDay[slot.day] = [];
       slotsByDay[slot.day].push(slot);
     }
+
     for (const day of Object.keys(slotsByDay)) {
       slotsByDay[day].sort((a, b) => a.slot_order - b.slot_order);
     }
-    const availableDays = DAY_ORDER.filter((d) => slotsByDay[d]?.length > 0);
 
-    // Conflict sets  key = "day_slotId"
-    const teacherBusy = {};
-    const roomBusy    = {};
-    const sectionBusy = {};
+    const availableDays = DAY_ORDER.filter(d => slotsByDay[d]?.length > 0);
 
-    // Teacher hour counters
+    const teacherBusy  = {};
+    const roomBusy     = {};
+    const sectionBusy  = {};
+
     const teacherWeekHours = {};
     const teacherDayHours  = {};
 
     const initTeacher = (tid, maxDay, maxWeek) => {
-      if (!teacherWeekHours[tid]) teacherWeekHours[tid] = { count: 0, max: maxWeek };
-      if (!teacherDayHours[tid])  teacherDayHours[tid]  = {};
-      availableDays.forEach((d) => {
-        if (!teacherDayHours[tid][d]) teacherDayHours[tid][d] = { count: 0, max: maxDay };
-      });
-    };
-
-    // Per-section daily slot counter
-    const sectionDayCount = {};
-    const initSectionDay  = (sid) => {
-      if (!sectionDayCount[sid]) {
-        sectionDayCount[sid] = {};
-        availableDays.forEach((d) => { sectionDayCount[sid][d] = 0; });
+      if (!teacherWeekHours[tid])
+        teacherWeekHours[tid] = { count: 0, max: maxWeek };
+      if (!teacherDayHours[tid]) teacherDayHours[tid] = {};
+      for (const d of availableDays) {
+        if (!teacherDayHours[tid][d])
+          teacherDayHours[tid][d] = { count: 0, max: maxDay };
       }
     };
-
-    const slotKey       = (day, slotId) => `${day}_${slotId}`;
-    const isTeacherFree = (tid, day, sid) => !teacherBusy[slotKey(day, sid)]?.has(tid);
-    const isRoomFree    = (rid, day, sid) => !roomBusy[slotKey(day, sid)]?.has(rid);
-    const isSectionFree = (secId, day, sid) => !sectionBusy[slotKey(day, sid)]?.has(secId);
 
     const teacherWithinLimits = (tid, day) => {
       const wh = teacherWeekHours[tid];
@@ -164,8 +177,41 @@ export const generateTimetable = async () => {
       return wh && dh && wh.count < wh.max && dh.count < dh.max;
     };
 
-    const sectionDayWithinLimit = (secId, day, maxPerDay) =>
-      (sectionDayCount[secId]?.[day] ?? 0) < maxPerDay;
+    const teacherCanTakeSlots = (tid, day, count) => {
+      const dh = teacherDayHours[tid]?.[day];
+      return dh && dh.count + count <= dh.max;
+    };
+
+    const teacherCanTakeWeekSlots = (tid, count) => {
+      const wh = teacherWeekHours[tid];
+      return wh && wh.count + count <= wh.max;
+    };
+
+    const sectionDayCount = {};
+    const initSectionDay  = (sid) => {
+      if (!sectionDayCount[sid]) {
+        sectionDayCount[sid] = {};
+        for (const d of availableDays) sectionDayCount[sid][d] = 0;
+      }
+    };
+
+    const subjectDayCount    = {};
+    const getSubjectDayCount = (sid, day) => subjectDayCount[sid]?.[day] ?? 0;
+    const incSubjectDayCount = (sid, day, n = 1) => {
+      if (!subjectDayCount[sid]) subjectDayCount[sid] = {};
+      subjectDayCount[sid][day] = (subjectDayCount[sid][day] ?? 0) + n;
+    };
+
+    const slotKey = (day, slotId) => `${day}_${slotId}`;
+
+    const isTeacherFree = (tid, day, sid) =>
+      !teacherBusy[slotKey(day, sid)]?.has(tid);
+
+    const isRoomFree = (rid, day, sid) =>
+      !roomBusy[slotKey(day, sid)]?.has(rid);
+
+    const isSectionFree = (secId, day, sid) =>
+      !sectionBusy[slotKey(day, sid)]?.has(secId);
 
     const markOccupied = (tid, rid, secId, day, slotId) => {
       const k = slotKey(day, slotId);
@@ -183,162 +229,188 @@ export const generateTimetable = async () => {
     const timetableInserts = [];
     const unassignedLogs   = [];
 
-    // Pre-compute the next calendar date for each weekday
     const dateForDay = {};
     for (const day of availableDays) {
       dateForDay[day] = nextDateForDay(day);
     }
 
     for (const section of sections) {
-      // Use section's own max_slots_per_day — fully configurable per section
-      const maxPerDay = section.max_slots_per_day ?? 6;
 
       initSectionDay(section.section_id);
 
-      const subjects = await getSubjectsBySection(section.course_id, section.semester);
+      const subjects = await getSubjectsBySection(
+        section.course_id,
+        section.semester
+      );
 
-      if (!subjects.length) {
-        unassignedLogs.push(`No subjects for section ${section.name} (sem ${section.semester})`);
-        continue;
-      }
+      const pending = [];
 
       for (const subject of subjects) {
-        let remainingHours = subject.weekly_hours || 1;
-
-        const rawTeachers = await getTeachersForSubject(subject.subject_id);
-        const rawRooms    = await getRoomsForSubject(subject.is_lab);
-
-        if (!rawTeachers.length) {
-          unassignedLogs.push(`No teachers for "${subject.name}" (section ${section.name})`);
-          continue;
-        }
-        if (!rawRooms.length) {
-          unassignedLogs.push(`No ${subject.is_lab ? "labs" : "classrooms"} for "${subject.name}" (section ${section.name})`);
-          continue;
-        }
+        const rawTeachers = await getTeachersForSubject(
+          subject.subject_id,
+          section.section_id
+        );
+        const rawRooms = await getRoomsForSubject(subject.is_lab);
 
         rawTeachers.forEach((t) =>
-          initTeacher(t.teacher_id, t.max_hours_per_day || 6, t.max_hours_per_week || 30)
+          initTeacher(
+            t.teacher_id,
+            t.max_hours_per_day  || 6,
+            t.max_hours_per_week || 30
+          )
         );
 
-        // Labs need 2 CONSECUTIVE slots on the same day, same teacher+room
-        // Theory subjects fill one slot at a time
-        const isLab       = !!subject.is_lab;
-        const slotsNeeded = isLab ? 2 : 1;   // lab = 2 back-to-back slots per session
+        pending.push({
+          subject,
+          rawTeachers,
+          rawRooms,
+          isLab:     !!subject.is_lab,
+          remaining: subject.weekly_hours || (subject.is_lab ? 2 : 1),
+        });
+      }
 
-        // Fill-day-first: fill up to maxPerDay slots per day before moving on
-        outer:
-        for (const day of availableDays) {
-          if (remainingHours <= 0) break;
+      for (const day of availableDays) {
+        const daySlots = slotsByDay[day];
 
-          const daySlots = slotsByDay[day];
+       
+        // This prevents Monday's last assigned subject from blocking Tuesday slot 1
+        let lastSubjectAssigned = null;
+        let lastWasLab          = false;
 
-          for (let i = 0; i < daySlots.length; i++) {
-            if (remainingHours <= 0) break outer;
+        let i = 0;
 
-            // Section daily limit — need room for slotsNeeded slots
-            const dayUsed = sectionDayCount[section.section_id]?.[day] ?? 0;
-            if (dayUsed + slotsNeeded > maxPerDay) break;  // no room left today
+        while (i < daySlots.length) {
+          let assigned  = false;
+          let skipExtra = false; 
 
-            // For labs: check that slot[i] and slot[i+1] are consecutive by slot_order
+          const sortedPending = [...pending]
+            .filter(e => e.remaining > 0)
+            .sort((a, b) => b.remaining - a.remaining);
+
+          for (const entry of sortedPending) {
+            const { subject, rawTeachers, rawRooms, isLab } = entry;
+
+            
+            if (lastSubjectAssigned === subject.subject_id) continue;
+
+            // ─── LAB BLOCK ─────────────────────────────────────────────
             if (isLab) {
+              
+              if (lastWasLab) continue;
               if (i + 1 >= daySlots.length) continue;
+
               const slotA = daySlots[i];
               const slotB = daySlots[i + 1];
-              // Must be adjacent slot_order (no gap)
-              if (slotB.slot_order !== slotA.slot_order + 1) continue;
-              // Both must be free for this section
-              if (!isSectionFree(section.section_id, day, slotA.slot_id)) continue;
-              if (!isSectionFree(section.section_id, day, slotB.slot_id)) continue;
 
-              // Preferred slot filter on first slot
-              if (subject.preferred_slot && subject.preferred_slot !== "ANY") {
-                const hour = parseInt((slotA.start_time || "00:00").split(":")[0], 10);
-                if (subject.preferred_slot === "MORNING"   && hour >= 12) continue;
-                if (subject.preferred_slot === "AFTERNOON" && hour < 12)  continue;
-              }
+              //  This correctly blocks labs from spanning the lunch break
+              // (50-min gap between slot 4 end 12:50 and slot 6 start 13:40)
+              if (!isConsecutiveSlot(slotA, slotB)) continue;
+              if (entry.remaining < 2)               continue;
 
-              const teachers = shuffle(rawTeachers);
-              const rooms    = shuffle(rawRooms);
+              //  Section free check BEFORE teacher/room loops
+              if (
+                !isSectionFree(section.section_id, day, slotA.slot_id) ||
+                !isSectionFree(section.section_id, day, slotB.slot_id)
+              ) continue;
 
-              for (const teacher of teachers) {
-                if (!isTeacherFree(teacher.teacher_id, day, slotA.slot_id)) continue;
-                if (!isTeacherFree(teacher.teacher_id, day, slotB.slot_id)) continue;
-                if (!teacherWithinLimits(teacher.teacher_id, day))          continue;
-                // Teacher needs 2 hours free today
-                const tdh = teacherDayHours[teacher.teacher_id]?.[day];
-                if (!tdh || tdh.count + 2 > tdh.max) continue;
+              for (const teacher of rawTeachers) {
+                if (
+                  !isTeacherFree(teacher.teacher_id, day, slotA.slot_id) ||
+                  !isTeacherFree(teacher.teacher_id, day, slotB.slot_id)
+                ) continue;
 
-                for (const room of rooms) {
-                  if (!isRoomFree(room.room_id, day, slotA.slot_id)) continue;
-                  if (!isRoomFree(room.room_id, day, slotB.slot_id)) continue;
+                if (!teacherWithinLimits(teacher.teacher_id, day))    continue;
+                if (!teacherCanTakeSlots(teacher.teacher_id, day, 2)) continue;
+                if (!teacherCanTakeWeekSlots(teacher.teacher_id, 2))  continue;
 
-                  // Book both slots as a pair
-                  timetableInserts.push([section.section_id, subject.subject_id, teacher.teacher_id, room.room_id, slotA.slot_id, dateForDay[day]]);
-                  timetableInserts.push([section.section_id, subject.subject_id, teacher.teacher_id, room.room_id, slotB.slot_id, dateForDay[day]]);
+                for (const room of rawRooms) {
+                  if (room.capacity < section.strength) continue;
+                  if (
+                    !isRoomFree(room.room_id, day, slotA.slot_id) ||
+                    !isRoomFree(room.room_id, day, slotB.slot_id)
+                  ) continue;
+
+                  timetableInserts.push([
+                    section.section_id, subject.subject_id,
+                    teacher.teacher_id, room.room_id,
+                    slotA.slot_id, dateForDay[day],
+                  ]);
+                  timetableInserts.push([
+                    section.section_id, subject.subject_id,
+                    teacher.teacher_id, room.room_id,
+                    slotB.slot_id, dateForDay[day],
+                  ]);
 
                   markOccupied(teacher.teacher_id, room.room_id, section.section_id, day, slotA.slot_id);
                   markOccupied(teacher.teacher_id, room.room_id, section.section_id, day, slotB.slot_id);
-                  remainingHours -= 2;
-                  i++;  // skip slotB in the outer loop
+
+                  incSubjectDayCount(subject.subject_id, day, 2);
+
+                  entry.remaining    -= 2;
+                  lastWasLab          = true;          
+                  lastSubjectAssigned = subject.subject_id; 
+
+                  assigned  = true;
+                  skipExtra = true; //  skip slotB at bottom of while
                   break;
                 }
-                if (!isSectionFree(section.section_id, day, slotA.slot_id)) break;
+                if (assigned) break;
               }
+            }
 
-            } else {
-              // Theory — single slot
+            // ─── THEORY BLOCK ───────────────────────────────────────────
+            else {
               const slot = daySlots[i];
 
               if (!isSectionFree(section.section_id, day, slot.slot_id)) continue;
+              if (getSubjectDayCount(subject.subject_id, day) >= 2)       continue;
 
-              // Preferred slot filter
-              if (subject.preferred_slot && subject.preferred_slot !== "ANY") {
-                const hour = parseInt((slot.start_time || "00:00").split(":")[0], 10);
-                if (subject.preferred_slot === "MORNING"   && hour >= 12) continue;
-                if (subject.preferred_slot === "AFTERNOON" && hour < 12)  continue;
-              }
-
-              const teachers = shuffle(rawTeachers);
-              const rooms    = shuffle(rawRooms);
-
-              for (const teacher of teachers) {
+              for (const teacher of rawTeachers) {
                 if (!isTeacherFree(teacher.teacher_id, day, slot.slot_id)) continue;
                 if (!teacherWithinLimits(teacher.teacher_id, day))         continue;
 
-                for (const room of rooms) {
+                for (const room of rawRooms) {
+                  if (room.capacity < section.strength)              continue;
                   if (!isRoomFree(room.room_id, day, slot.slot_id)) continue;
 
                   timetableInserts.push([
-                    section.section_id,
-                    subject.subject_id,
-                    teacher.teacher_id,
-                    room.room_id,
-                    slot.slot_id,
-                    dateForDay[day],
+                    section.section_id, subject.subject_id,
+                    teacher.teacher_id, room.room_id,
+                    slot.slot_id, dateForDay[day],
                   ]);
 
                   markOccupied(teacher.teacher_id, room.room_id, section.section_id, day, slot.slot_id);
-                  remainingHours--;
+
+                  incSubjectDayCount(subject.subject_id, day); 
+
+                  entry.remaining--;
+                  lastWasLab          = false;              
+                  lastSubjectAssigned = subject.subject_id; 
+
+                  assigned = true;
                   break;
                 }
-                if (!isSectionFree(section.section_id, day, slot.slot_id)) break;
+                if (assigned) break;
               }
             }
-          }
-        }
 
-        if (remainingHours > 0) {
-          unassignedLogs.push(
-            `Could not assign all hours for "${subject.name}" (section ${section.name}). Remaining: ${remainingHours}`
-          );
+            if (assigned) break;
+          }
+
+          if (!assigned) {
+            unassignedLogs.push(`Empty slot ${day} slot_id=${daySlots[i].slot_id}`);
+          }
+
+          i++;
+          if (skipExtra) i++; 
         }
       }
     }
 
     if (timetableInserts.length > 0) {
       await connection.query(
-        `INSERT INTO timetables (section_id, subject_id, teacher_id, room_id, slot_id, class_date)
+        `INSERT INTO timetables
+         (section_id, subject_id, teacher_id, room_id, slot_id, class_date)
          VALUES ?`,
         [timetableInserts]
       );
@@ -356,6 +428,88 @@ export const generateTimetable = async () => {
   } catch (error) {
     await connection.rollback();
     throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+/* ===========================
+   DRAG & DROP SWAP
+=========================== */
+
+export const swapTimetableSlots = async (req, res) => {
+  const { from, to } = req.body;
+  // from / to shape:
+  // { timetableId, slotId, sectionId, subjectId, teacherId, roomId, day, isLab }
+
+  if (!from?.timetableId || !to?.slotId) {
+    return res.status(400).json({ error: "Invalid swap payload" });
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Conflict check: FROM teacher moving to TO slot
+    const [teacherConflict] = await connection.query(
+      `SELECT 1 FROM timetables
+       WHERE slot_id       = ?
+         AND teacher_id    = ?
+         AND timetable_id != ?
+       LIMIT 1`,
+      [to.slotId, from.teacherId, from.timetableId]
+    );
+    if (teacherConflict.length)
+      return res.status(409).json({ error: "Teacher is busy at the target slot" });
+
+    // Conflict check: FROM room moving to TO slot
+    const [roomConflict] = await connection.query(
+      `SELECT 1 FROM timetables
+       WHERE slot_id       = ?
+         AND room_id       = ?
+         AND timetable_id != ?
+       LIMIT 1`,
+      [to.slotId, from.roomId, from.timetableId]
+    );
+    if (roomConflict.length)
+      return res.status(409).json({ error: "Room is occupied at the target slot" });
+
+    if (to.timetableId) {
+      // Two-way swap: conflict check for TO entry moving to FROM slot
+      const [teacherConflict2] = await connection.query(
+        `SELECT 1 FROM timetables
+         WHERE slot_id       = ?
+           AND teacher_id    = ?
+           AND timetable_id != ?
+         LIMIT 1`,
+        [from.slotId, to.teacherId, to.timetableId]
+      );
+      if (teacherConflict2.length)
+        return res.status(409).json({ error: "Teacher is busy at the source slot" });
+
+      await connection.query(
+        `UPDATE timetables SET slot_id = ? WHERE timetable_id = ?`,
+        [to.slotId, from.timetableId]
+      );
+      await connection.query(
+        `UPDATE timetables SET slot_id = ? WHERE timetable_id = ?`,
+        [from.slotId, to.timetableId]
+      );
+    } else {
+      // One-way move to empty slot
+      await connection.query(
+        `UPDATE timetables SET slot_id = ? WHERE timetable_id = ?`,
+        [to.slotId, from.timetableId]
+      );
+    }
+
+    await connection.commit();
+    res.json({ success: true, message: "Slots swapped successfully" });
+
+  } catch (err) {
+    await connection.rollback();
+    res.status(500).json({ error: err.message });
   } finally {
     connection.release();
   }
@@ -435,7 +589,6 @@ export const getSectionsWithDepartment = async () => {
   return rows;
 };
 
-/* Teacher's own timetable — all sections they teach */
 export const getTimetableForTeacher = async (teacher_id) => {
   const [rows] = await pool.query(
     `SELECT
