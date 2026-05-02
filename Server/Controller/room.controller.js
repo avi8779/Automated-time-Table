@@ -25,7 +25,7 @@ export const createRoom = asyncHandler(async (req, res) => {
   if (capacity < 1 || capacity > 300)
     throw new AppError("Capacity must be between 1 and 300", 400);
 
-  if (await roomModel.roomNoExists(room_no))
+  if (await roomModel.roomNoExists(room_no, building_id))
     throw new AppError("Room number already exists", 409);
 
   if (!(await roomModel.buildingExistsById(building_id)))
@@ -66,6 +66,9 @@ export const updateRoom = asyncHandler(async (req, res) => {
 
   if (!VALID_ROOM_TYPES.includes(room_type.toUpperCase()))
     throw new AppError("room_type must be CLASSROOM or LAB", 400);
+
+  if (await roomModel.roomNoExists(room_no, building_id, req.params.id))
+    throw new AppError("Room number already exists", 409);
 
   const updated = await roomModel.updateRoom(req.params.id, {
     room_no, building_id: Number(building_id),

@@ -3,7 +3,7 @@ import axiosInstance from "../../Helper/axiosInstance";
 import { toast } from "react-toastify";
 
 const ENTITIES = [
-  { key: "buildings",        label: "Buildings",              icon: "🏢", fields: "building_name, building_code" },
+  { key: "buildings",        label: "Buildings",              icon: "🏢", fields: "building_name, building_code, floors" },
   { key: "rooms",            label: "Rooms",                  icon: "🚪", fields: "room_no, room_type, capacity, building_code" },
   { key: "courses",          label: "Courses",                icon: "📚", fields: "course_name, course_code, department_code, duration_years" },
   { key: "teachers",         label: "Teachers",               icon: "👨‍🏫", fields: "name, email, max_hours_per_day, max_hours_per_week, password, department_code"},
@@ -69,7 +69,8 @@ export default function BulkUpload() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setResult(res.data);
-      if (res.data.inserted > 0) toast.success(`${res.data.inserted} records inserted!`);
+      if (res.data.errors?.length) toast.error(`${res.data.errors.length} row error(s). Check upload result.`);
+      else if (res.data.inserted > 0) toast.success(`${res.data.inserted} records inserted!`);
       else toast.info("No new records inserted");
     } catch (err) {
       toast.error(err.response?.data?.message || "Upload failed");
@@ -120,6 +121,7 @@ export default function BulkUpload() {
                 </h2>
                 <p className="text-xs text-slate-500 mt-1">
                   Required columns: <span className="text-slate-400 font-mono">{selected.fields}</span>
+                  <span className="block mt-1">Downloaded templates include valid code references below the upload rows.</span>
                 </p>
               </div>
               <button
@@ -219,10 +221,10 @@ export default function BulkUpload() {
             <h2 className="text-sm font-semibold text-slate-300 mb-3">How it works</h2>
             <ol className="space-y-2 text-sm text-slate-400 list-decimal list-inside">
               <li>Select the entity type you want to bulk upload above</li>
-              <li>Click <span className="text-emerald-400 font-semibold">Download Template</span> to get the correct Excel format</li>
+              <li>Click <span className="text-emerald-400 font-semibold">Download Template</span> to get the correct Excel format with reference codes below the upload rows</li>
               <li>Fill in your data in the template — do not change the column headers</li>
-              <li>Upload the filled Excel file — duplicates are automatically skipped</li>
-              <li>Review the result — inserted count, skipped count, and any row errors</li>
+              <li>Upload the filled Excel file — duplicates are reported with exact row errors</li>
+              <li>Review the result — inserted count, skipped count, and row-level errors</li>
             </ol>
             <div className="mt-4 p-3 bg-amber-900/20 border border-amber-800/40 rounded-lg">
               <p className="text-xs text-amber-300">

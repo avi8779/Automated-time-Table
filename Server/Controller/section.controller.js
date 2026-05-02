@@ -1,5 +1,5 @@
 import {
-  sectionNameExists,
+  getSectionConflict,
   courseExistsById,
   createSection,
   getAllSections,
@@ -7,6 +7,22 @@ import {
   updateSection,
   softDeleteSection,
 } from "../model/section.model.js";
+
+const sectionConflictMessage = (section_name) =>
+  `Section "${section_name}" already exists for this course and batch year`;
+
+const deletedSectionConflictMessage = (section_name) =>
+  `Section "${section_name}" already exists in deleted sections for this course and batch year. Use a different section name or restore that section first.`;
+
+const handleSectionError = (res, error) => {
+  if (error.code === "ER_DUP_ENTRY") {
+    return res.status(409).json({
+      success: false,
+      message: "Section already exists for this course and batch year",
+    });
+  }
+  return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+};
 
 export const createSectionController = async (req, res) => {
   try {
@@ -20,12 +36,16 @@ export const createSectionController = async (req, res) => {
       return res.status(400).json({ success: false, message: "Strength must be between 1 and 500" });
     }
 
-    if (await sectionNameExists(section_name)) {
-      return res.status(409).json({ success: false, message: "Section already exists" });
-    }
-
     if (!(await courseExistsById(course_id))) {
       return res.status(404).json({ success: false, message: "Course not found" });
+    }
+
+    const conflict = await getSectionConflict(course_id, batch_year, section_name);
+    if (conflict?.is_deleted) {
+      return res.status(409).json({ success: false, message: deletedSectionConflictMessage(section_name) });
+    }
+    if (conflict) {
+      return res.status(409).json({ success: false, message: sectionConflictMessage(section_name) });
     }
 
     const section_id = await createSection({
@@ -36,7 +56,7 @@ export const createSectionController = async (req, res) => {
     res.status(201).json({ success: true, message: "Section created successfully", section_id });
   } catch (error) {
     console.error("Create Section Error:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    return handleSectionError(res, error);
   }
 };
 
@@ -76,6 +96,14 @@ export const updateSectionController = async (req, res) => {
       return res.status(404).json({ success: false, message: "Course not found" });
     }
 
+    const conflict = await getSectionConflict(course_id, batch_year, section_name, req.params.id);
+    if (conflict?.is_deleted) {
+      return res.status(409).json({ success: false, message: deletedSectionConflictMessage(section_name) });
+    }
+    if (conflict) {
+      return res.status(409).json({ success: false, message: sectionConflictMessage(section_name) });
+    }
+
     const affectedRows = await updateSection(req.params.id, {
       section_name, course_id, semester, strength,
       batch_year, max_slots_per_day: max_slots_per_day ?? 6, status,
@@ -84,7 +112,7 @@ export const updateSectionController = async (req, res) => {
     if (!affectedRows) return res.status(404).json({ success: false, message: "Section not found" });
     res.status(200).json({ success: true, message: "Section updated successfully" });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Internal server error" });
+    return handleSectionError(res, error);
   }
 };
 

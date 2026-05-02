@@ -59,15 +59,21 @@ export const getAllSubjects = async () => {
        s.subject_id,
        s.subject_code,
        s.subject_name,
+       s.course_id,
        s.semester,
        s.weekly_hours,
        s.credits,
        s.is_lab,
        s.preferred_slot,
        s.status,
-       c.course_name
+       c.course_code,
+       c.course_name,
+       c.depart_id,
+       d.department_code,
+       d.name AS department_name
      FROM subjects s
      JOIN courses c ON c.course_id = s.course_id
+     JOIN department d ON d.depart_id = c.depart_id
      WHERE s.is_deleted = 0
      ORDER BY s.subject_id ASC`
   );

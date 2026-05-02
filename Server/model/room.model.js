@@ -2,11 +2,16 @@ import { pool } from "../config/dbConn.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-export const roomNoExists = async (room_no) => {
-  const [rows] = await pool.query(
-    "SELECT room_id FROM rooms WHERE room_no = ? AND is_deleted = 0",
-    [room_no]
-  );
+export const roomNoExists = async (room_no, building_id, exclude_room_id = null) => {
+  const params = [room_no, building_id];
+  let sql = "SELECT room_id FROM rooms WHERE room_no = ? AND building_id = ? AND is_deleted = 0";
+
+  if (exclude_room_id) {
+    sql += " AND room_id != ?";
+    params.push(exclude_room_id);
+  }
+
+  const [rows] = await pool.query(sql, params);
   return rows.length > 0;
 };
 

@@ -11,6 +11,26 @@ export const sectionNameExists = async (section_name) => {
   return rows.length > 0;
 };
 
+export const getSectionConflict = async (course_id, batch_year, section_name, exclude_section_id = null) => {
+  const params = [course_id, batch_year, section_name];
+  let sql = `
+    SELECT section_id, is_deleted
+    FROM sections
+    WHERE course_id = ?
+      AND batch_year = ?
+      AND section_name = ?
+  `;
+
+  if (exclude_section_id) {
+    sql += " AND section_id != ?";
+    params.push(exclude_section_id);
+  }
+
+  sql += " LIMIT 1";
+  const [rows] = await pool.query(sql, params);
+  return rows[0] || null;
+};
+
 // check if course exists
 export const courseExistsById = async (course_id) => {
   const [rows] = await pool.query(
@@ -29,14 +49,15 @@ export const createSection = async (data) => {
     semester,
     strength,
     batch_year,
+    max_slots_per_day,
     status
   } = data;
 
   const [result] = await pool.query(
     `INSERT INTO sections
-     (section_name, course_id, semester, strength, batch_year, status)
-     VALUES (?,?,?,?,?,?)`,
-    [section_name, course_id, semester, strength, batch_year, status]
+     (section_name, course_id, semester, strength, batch_year, max_slots_per_day, status)
+     VALUES (?,?,?,?,?,?,?)`,
+    [section_name, course_id, semester, strength, batch_year, max_slots_per_day ?? 6, status]
   );
 
   return result.insertId;
@@ -49,10 +70,13 @@ export const getAllSections = async () => {
     `SELECT 
        s.section_id,
        s.section_name,
+       s.course_id,
        s.semester,
        s.strength,
        s.batch_year,
+       s.max_slots_per_day,
        s.status,
+       c.course_code,
        c.course_name
      FROM sections s
      LEFT JOIN courses c ON c.course_id = s.course_id
@@ -82,12 +106,13 @@ export const updateSection = async (section_id, data) => {
     semester,
     strength,
     batch_year,
+    max_slots_per_day,
     status
   } = data;
 
   const [result] = await pool.query(
     `UPDATE sections
-     SET section_name = ?, course_id = ?, semester = ?, strength = ?, batch_year = ?, status = ?
+     SET section_name = ?, course_id = ?, semester = ?, strength = ?, batch_year = ?, max_slots_per_day = ?, status = ?
      WHERE section_id = ? AND is_deleted = 0`,
     [
       section_name,
@@ -95,6 +120,7 @@ export const updateSection = async (section_id, data) => {
       semester,
       strength,
       batch_year,
+      max_slots_per_day ?? 6,
       status,
       section_id
     ]

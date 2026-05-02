@@ -19,6 +19,16 @@ const EMPTY_FORM = {
 const SELECT_CLS = "w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 disabled:opacity-40";
 const INPUT_CLS  = "w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-emerald-500";
 
+const getSubjectCourse = (item, courses) => courses.find((c) =>
+  String(c.course_id) === String(item.course_id) ||
+  (item.course_name && c.course_name === item.course_name)
+);
+
+const getCourseDepartmentId = (item, courses) => {
+  const course = getSubjectCourse(item, courses);
+  return course?.depart_id ?? item.depart_id ?? item.department_id ?? "";
+};
+
 export default function CreateSubject() {
   const dispatch = useDispatch();
   const { data: subjects, loading } = useSelector((s) => s.subject);
@@ -53,20 +63,25 @@ export default function CreateSubject() {
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  useEffect(() => {
+    if (!isEditing || form.department_id || !form.course_id || courses.length === 0) return;
+    const course = courses.find((c) => String(c.course_id) === String(form.course_id));
+    if (course?.depart_id) setField("department_id", course.depart_id);
+  }, [courses, form.course_id, form.department_id, isEditing]);
+
   const openCreate = () => {
     setIsEditing(false); setEditingId(null);
     setForm(EMPTY_FORM); setFormError(null); setModalOpen(true);
   };
 
   const openEdit = (item) => {
-    // Find department from course
-    const course = courses.find((c) => c.course_id === item.course_id);
+    const course = getSubjectCourse(item, courses);
     setIsEditing(true); setEditingId(item.subject_id);
     setForm({
       subject_code:   item.subject_code   || "",
       subject_name:   item.subject_name   || "",
-      department_id:  course?.depart_id   || "",
-      course_id:      item.course_id      || "",
+      department_id:  getCourseDepartmentId(item, courses),
+      course_id:      item.course_id || course?.course_id || "",
       semester:       item.semester       || "",
       weekly_hours:   item.weekly_hours   || "",
       credits:        item.credits        || "",
