@@ -1,4 +1,10 @@
 import { pool } from "../config/dbConn.js";
+import { sendTeacherTimetableEmail } from "./email.service.js";
+import {
+  buildOptimizerContext,
+  generateInitialTimetable,
+  optimizeTimetable,
+} from "./timetable.optimizer.js";
 
 /* ===========================
    HELPER QUERIES
@@ -16,9 +22,9 @@ const getAvailableSlots = async () => {
   return rows;
 };
 
-const getSections = async () => {
-  const [rows] = await pool.query(
-    `SELECT
+const getSections = async (filters = {}, db = pool) => {
+  const params = [];
+  let sql = `SELECT
        s.section_id,
        s.section_name AS name,
        s.course_id,
@@ -30,9 +36,157 @@ const getSections = async () => {
      FROM sections s
      JOIN courses    c ON c.course_id  = s.course_id
      JOIN department d ON d.depart_id  = c.depart_id
-     WHERE s.is_deleted = 0`
+     WHERE s.is_deleted = 0`;
+
+  if (filters.department_id) {
+    sql += " AND d.depart_id = ?";
+    params.push(filters.department_id);
+  }
+
+  if (filters.section_id) {
+    sql += " AND s.section_id = ?";
+    params.push(filters.section_id);
+  }
+
+  sql += " ORDER BY d.name, s.section_name";
+
+  const [rows] = await db.query(sql, params);
+  return rows;
+};
+
+const getExistingTimetableRowsOutsideSections = async (sectionIds, db = pool) => {
+  if (!sectionIds.length) return [];
+
+  const [rows] = await db.query(
+    `SELECT
+       tt.section_id,
+       tt.teacher_id,
+       tt.room_id,
+       ts.day,
+       tt.slot_id
+     FROM timetables tt
+     JOIN time_slots ts ON ts.slot_id = tt.slot_id
+     WHERE tt.section_id NOT IN (?)`,
+    [sectionIds]
   );
   return rows;
+};
+
+const validateTimetableForSections = async (sectionIds) => {
+  if (!sectionIds.length) return [];
+  const issues = [];
+
+  const conflictQueries = [
+    {
+      label: "Teacher conflict",
+      sql: `SELECT t.name, ts.day, ts.start_time, ts.end_time, COUNT(*) AS total
+            FROM timetables tt
+            JOIN teachers t ON t.teacher_id = tt.teacher_id
+            JOIN time_slots ts ON ts.slot_id = tt.slot_id
+            GROUP BY tt.teacher_id, ts.day, ts.start_time, ts.end_time
+            HAVING COUNT(*) > 1
+               AND SUM(CASE WHEN tt.section_id IN (?) THEN 1 ELSE 0 END) > 0`,
+      format: (row) => `${row.name} has ${row.total} classes on ${row.day} ${String(row.start_time).slice(0, 5)}-${String(row.end_time).slice(0, 5)}`,
+    },
+    {
+      label: "Room conflict",
+      sql: `SELECT r.room_no, ts.day, ts.start_time, ts.end_time, COUNT(*) AS total
+            FROM timetables tt
+            JOIN rooms r ON r.room_id = tt.room_id
+            JOIN time_slots ts ON ts.slot_id = tt.slot_id
+            GROUP BY tt.room_id, ts.day, ts.start_time, ts.end_time
+            HAVING COUNT(*) > 1
+               AND SUM(CASE WHEN tt.section_id IN (?) THEN 1 ELSE 0 END) > 0`,
+      format: (row) => `Room ${row.room_no} has ${row.total} classes on ${row.day} ${String(row.start_time).slice(0, 5)}-${String(row.end_time).slice(0, 5)}`,
+    },
+    {
+      label: "Section conflict",
+      sql: `SELECT s.section_name, ts.day, ts.start_time, ts.end_time, COUNT(*) AS total
+            FROM timetables tt
+            JOIN sections s ON s.section_id = tt.section_id
+            JOIN time_slots ts ON ts.slot_id = tt.slot_id
+            WHERE tt.section_id IN (?)
+            GROUP BY tt.section_id, ts.day, ts.start_time, ts.end_time
+            HAVING COUNT(*) > 1`,
+      format: (row) => `${row.section_name} has ${row.total} classes on ${row.day} ${String(row.start_time).slice(0, 5)}-${String(row.end_time).slice(0, 5)}`,
+    },
+  ];
+
+  for (const query of conflictQueries) {
+    const [rows] = await pool.query(query.sql, [sectionIds]);
+    rows.forEach((row) => issues.push(`${query.label}: ${query.format(row)}`));
+  }
+
+  return issues;
+};
+
+const getTeacherTimetableRecipients = async (sectionIds) => {
+  if (!sectionIds.length) return [];
+
+  const [rows] = await pool.query(
+    `SELECT
+       t.teacher_id,
+       t.name AS teacher_name,
+       t.email,
+       sec.section_name,
+       subj.subject_name,
+       r.room_no,
+       ts.day,
+       ts.slot_order,
+       ts.start_time,
+       ts.end_time
+     FROM timetables tt
+     JOIN teachers t ON t.teacher_id = tt.teacher_id
+     JOIN sections sec ON sec.section_id = tt.section_id
+     JOIN subjects subj ON subj.subject_id = tt.subject_id
+     JOIN rooms r ON r.room_id = tt.room_id
+     JOIN time_slots ts ON ts.slot_id = tt.slot_id
+     WHERE tt.section_id IN (?)
+       AND t.is_deleted = 0
+     ORDER BY t.name, FIELD(ts.day,'MON','TUE','WED','THU','FRI','SAT'), ts.slot_order`,
+    [sectionIds]
+  );
+
+  const recipients = new Map();
+  rows.forEach((row) => {
+    if (!recipients.has(row.teacher_id)) {
+      recipients.set(row.teacher_id, {
+        teacher_id: row.teacher_id,
+        name: row.teacher_name,
+        email: row.email,
+        rows: [],
+      });
+    }
+    recipients.get(row.teacher_id).rows.push(row);
+  });
+
+  return Array.from(recipients.values());
+};
+
+const sendGeneratedTimetableEmails = async (sectionIds, options = {}) => {
+  const recipients = await getTeacherTimetableRecipients(sectionIds);
+  const result = { sent: [], failed: [], skipped: [] };
+
+  for (const teacher of recipients) {
+    const to = options.testEmail || teacher.email;
+    if (!to) {
+      result.skipped.push({ name: teacher.name, reason: "No email address" });
+      continue;
+    }
+
+    try {
+      await sendTeacherTimetableEmail({
+        to,
+        name: teacher.name,
+        rows: teacher.rows,
+      });
+      result.sent.push(options.testEmail ? `${teacher.name} -> ${options.testEmail}` : teacher.name);
+    } catch (error) {
+      result.failed.push({ name: teacher.name, reason: error.message });
+    }
+  }
+
+  return result;
 };
 
 const getSubjectsBySection = async (course_id, semester) => {
@@ -104,11 +258,268 @@ const nextDateForDay = (dayName) => {
   return next.toISOString().slice(0, 10);
 };
 
+const buildGenerationScope = (options = {}) => {
+  const scope = options.scope || "all";
+  const sectionFilters = {};
+
+  if (scope === "department") {
+    if (!options.department_id || isNaN(Number(options.department_id))) {
+      throw new Error("department_id is required for department timetable generation");
+    }
+    sectionFilters.department_id = Number(options.department_id);
+  } else if (scope === "section") {
+    if (!options.section_id || isNaN(Number(options.section_id))) {
+      throw new Error("section_id is required for section timetable generation");
+    }
+    sectionFilters.section_id = Number(options.section_id);
+  } else if (scope !== "all") {
+    throw new Error("Invalid timetable generation scope");
+  }
+
+  return { scope, sectionFilters };
+};
+
+const calculateExpectedSlots = (sectionSubjects) =>
+  sectionSubjects.reduce((total, item) => {
+    const weeklyHours = Number(item.subject.weekly_hours) || (item.subject.is_lab ? 2 : 1);
+    return total + (item.subject.is_lab ? Math.floor(weeklyHours / 2) * 2 : weeklyHours);
+  }, 0);
+
+const createTimetableInsertRows = (timetable, dateForDay) =>
+  timetable.map((row) => [
+    row.section_id,
+    row.subject_id,
+    row.teacher_id,
+    row.room_id,
+    row.slot_id,
+    row.class_date || dateForDay[row.day],
+  ]);
+
+export const logUnassigned = ({ sectionSubjects, timetable, slotsByDay, availableDays, debugLogs = [], optimizerUnassigned = [] }) => {
+  const expected = new Map();
+  const actual = new Map();
+  const sectionById = new Map();
+
+  for (const item of sectionSubjects) {
+    const weeklyHours = Number(item.subject.weekly_hours) || (item.subject.is_lab ? 2 : 1);
+    const requiredHours = item.subject.is_lab ? Math.floor(weeklyHours / 2) * 2 : weeklyHours;
+    const key = `${item.section.section_id}:${item.subject.subject_id}`;
+    sectionById.set(item.section.section_id, item.section);
+    expected.set(key, {
+      section: item.section.name,
+      section_id: item.section.section_id,
+      subject: item.subject.name,
+      subject_id: item.subject.subject_id,
+      required: requiredHours,
+    });
+    actual.set(key, 0);
+  }
+
+  const occupiedBySection = new Set();
+  for (const row of timetable) {
+    const subjectKey = `${row.section_id}:${row.subject_id}`;
+    actual.set(subjectKey, (actual.get(subjectKey) || 0) + 1);
+    occupiedBySection.add(`${row.section_id}:${row.day}:${row.slot_id}`);
+  }
+
+  const unassignedSubjects = [];
+  for (const [key, item] of expected.entries()) {
+    const remaining = Math.max(item.required - (actual.get(key) || 0), 0);
+    if (remaining > 0) {
+      const optimizerReason = optimizerUnassigned.find((entry) =>
+        entry.subject_id === item.subject_id && entry.section === item.section
+      )?.reason;
+      unassignedSubjects.push({
+        section: item.section,
+        subject: item.subject,
+        remaining,
+        reason: optimizerReason || "No valid teacher/room/slot combination found",
+      });
+    }
+  }
+
+  const emptySlots = [];
+  for (const section of sectionById.values()) {
+    for (const day of availableDays) {
+      for (const slot of slotsByDay[day] || []) {
+        if (!occupiedBySection.has(`${section.section_id}:${day}:${slot.slot_id}`)) {
+          emptySlots.push({
+            section: section.name,
+            day,
+            slot: slot.slot_order,
+            slot_id: slot.slot_id,
+          });
+        }
+      }
+    }
+  }
+
+  // Only surface failure reasons for subjects that are actually unassigned.
+  // Backtracking logs 'failed at SAT' etc. for every day it tries before
+  // succeeding on another day — those are noise, not real errors.
+  const unassignedLabels = new Set(
+    unassignedSubjects.map((item) => `${item.section}: ${item.subject}`)
+  );
+  const failureReasons = unassignedSubjects.length > 0
+    ? debugLogs
+        .filter((message) => {
+          if (!/failed|could not be placed|Fallback failed|no hard-valid/i.test(message)) return false;
+          // Only keep messages that mention a subject that is truly unassigned
+          return Array.from(unassignedLabels).some((label) => message.includes(label.split(': ')[1]));
+        })
+        .slice(0, 80)
+    : [];
+
+  return {
+    unassignedSubjects,
+    emptySlots: emptySlots.slice(0, 200),
+    failureReasons,
+  };
+};
+
+export const sendTimetableEmail = async (options = {}) => {
+  const { sectionFilters } = buildGenerationScope(options);
+  const sections = await getSections(sectionFilters);
+  const sectionIds = sections.map((section) => section.section_id);
+  if (!sectionIds.length) throw new Error("No active sections found for timetable email");
+  return sendGeneratedTimetableEmails(sectionIds, { testEmail: options.testEmail });
+};
+
+const persistGeneratedTimetable = async (connection, scope, sectionIds, timetableInserts) => {
+  if (scope === "all") {
+    await connection.query(`DELETE FROM timetables`);
+  } else {
+    await connection.query(`DELETE FROM timetables WHERE section_id IN (?)`, [sectionIds]);
+  }
+
+  if (timetableInserts.length > 0) {
+    await connection.query(
+      `INSERT INTO timetables
+       (section_id, subject_id, teacher_id, room_id, slot_id, class_date)
+       VALUES ?`,
+      [timetableInserts]
+    );
+  }
+};
+
+export const generateTimetable = async (options = {}) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const { scope, sectionFilters } = buildGenerationScope(options);
+    await connection.beginTransaction();
+
+    const sections = await getSections(sectionFilters, connection);
+    const sectionIds = sections.map((section) => section.section_id);
+    if (!sections.length) throw new Error("No active sections found for the selected scope");
+
+    const slots = await getAvailableSlots();
+    if (!slots.length) throw new Error("No active time slots found");
+
+    const dateForDay = {};
+    for (const day of DAY_ORDER) dateForDay[day] = nextDateForDay(day);
+
+    const existingBusy = scope === "all"
+      ? []
+      : await getExistingTimetableRowsOutsideSections(sectionIds, connection);
+
+    const sectionSubjects = [];
+    const teacherById = new Map();
+    const teachersBySubjectSection = new Map();
+    const roomsBySubject = new Map();
+
+    for (const section of sections) {
+      const subjects = await getSubjectsBySection(section.course_id, section.semester);
+
+      for (const subject of subjects) {
+        const teachers = await getTeachersForSubject(subject.subject_id, section.section_id);
+        const rooms = await getRoomsForSubject(subject.is_lab);
+
+        teachers.forEach((teacher) => teacherById.set(teacher.teacher_id, teacher));
+        teachersBySubjectSection.set(`${section.section_id}:${subject.subject_id}`, teachers);
+        roomsBySubject.set(subject.subject_id, rooms);
+        sectionSubjects.push({ section, subject, teachers, rooms });
+      }
+    }
+
+    const optimizerContext = buildOptimizerContext(
+      {
+        sections,
+        slots,
+        dateForDay,
+        existingBusy,
+        sectionSubjects,
+        teacherById,
+        teachersBySubjectSection,
+        roomsBySubject,
+      },
+      options.optimizer || {}
+    );
+
+    const initial = generateInitialTimetable(optimizerContext, options.optimizer || {});
+    const optimized = options.useAnnealing === false
+      ? { timetable: initial.timetable, score: initial.score, debugLogs: [] }
+      : optimizeTimetable(initial.timetable, optimizerContext);
+    const combinedDebugLogs = [...initial.debugLogs, ...optimized.debugLogs].slice(0, options.optimizer?.debugLimit || 300);
+
+    const timetableInserts = createTimetableInsertRows(optimized.timetable, dateForDay);
+    await persistGeneratedTimetable(connection, scope, sectionIds, timetableInserts);
+    await connection.commit();
+
+    const expectedSlots = calculateExpectedSlots(sectionSubjects);
+    const missingSlots = Math.max(expectedSlots - timetableInserts.length, 0);
+    const debugInfo = logUnassigned({
+      sectionSubjects,
+      timetable: optimized.timetable,
+      slotsByDay: optimizerContext.slotsByDay,
+      availableDays: optimizerContext.availableDays,
+      debugLogs: combinedDebugLogs,
+      optimizerUnassigned: initial.unassignedDetails || [],
+    });
+    const unassigned = missingSlots > 0
+      ? [`${missingSlots} required slot(s) could not be assigned within the search limits`]
+      : [];
+    const assignmentIssues = [
+      ...initial.hardViolations,
+      ...(initial.timedOut ? ["Backtracking stopped early after reaching the configured performance limit"] : []),
+      ...debugInfo.unassignedSubjects.map((item) => `${item.section}: ${item.subject} has ${item.remaining} unassigned hour(s) - ${item.reason}`),
+      ...(missingSlots > 0 ? [`${missingSlots} required slot(s) remain unassigned`] : []),
+      ...(await validateTimetableForSections(sectionIds)),
+    ];
+
+    const emailResult = {
+      sent: [],
+      failed: [],
+      skipped: [],
+      blocked: assignmentIssues.length > 0,
+      issues: assignmentIssues,
+      readyToSend: assignmentIssues.length === 0,
+    };
+
+    return {
+      success: true,
+      message: `Timetable generated for ${scope}! Assigned ${timetableInserts.length} slots. Score: ${optimized.score}.`,
+      assignedCount: timetableInserts.length,
+      score: optimized.score,
+      unassigned,
+      assignmentIssues,
+      debugLogs: combinedDebugLogs,
+      debugInfo,
+      email: emailResult,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
 /* ===========================
    MAIN GENERATOR
 =========================== */
 
-export const generateTimetable = async () => {
+const generateTimetableGreedy = async () => {
   const connection = await pool.getConnection();
 
   try {
@@ -405,6 +816,7 @@ export const generateTimetable = async () => {
           if (skipExtra) i++; 
         }
       }
+
     }
 
     if (timetableInserts.length > 0) {

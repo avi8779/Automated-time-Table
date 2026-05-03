@@ -1,1 +1,255 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --app-bg: #07111f;
+  --app-bg-soft: #111827;
+  --app-text: #e5edf6;
+  --app-muted: #94a3b8;
+  --app-panel: rgba(15, 23, 42, 0.86);
+  --app-card: rgba(30, 41, 59, 0.76);
+  --app-input: rgba(15, 23, 42, 0.90);
+  --app-line: rgba(71, 85, 105, 0.62);
+  --app-line-strong: #334155;
+  --app-accent: #2dd4bf;
+  --app-accent-hover: #5eead4;
+  --app-accent-soft: rgba(20, 184, 166, 0.14);
+  --app-shadow: rgba(0, 0, 0, 0.30);
+  --legacy-surface: rgba(15, 23, 42, 0.86);
+  --legacy-surface-2: #1e293b;
+  background: var(--app-bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--app-bg);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.10), transparent 30rem),
+    linear-gradient(180deg, var(--app-bg) 0%, var(--app-bg-soft) 100%);
+  color: var(--app-text);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: rgba(20, 184, 166, 0.22);
+  color: var(--app-text);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--app-line-strong);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 999px;
+  border: 2px solid var(--app-line-strong);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.app-shell {
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.12), transparent 28rem),
+    linear-gradient(180deg, var(--app-bg) 0%, var(--app-bg-soft) 100%);
+}
+
+.app-page {
+  min-height: 100vh;
+  color: var(--app-text);
+}
+
+.app-container {
+  width: min(100%, 80rem);
+  margin-inline: auto;
+  padding: 1.75rem 1.25rem;
+}
+
+@media (min-width: 1024px) {
+  .app-container {
+    padding-inline: 2rem;
+  }
+}
+
+.app-panel {
+  border: 1px solid var(--app-line);
+  background: var(--app-panel);
+  box-shadow: 0 18px 48px var(--app-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.app-card {
+  border: 1px solid var(--app-line);
+  background: var(--app-card);
+  box-shadow: 0 10px 28px var(--app-shadow);
+}
+
+.app-input {
+  border: 1px solid var(--app-line);
+  background: var(--app-input);
+  color: var(--app-text);
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.app-input::placeholder {
+  color: #94a3b8;
+}
+
+.app-input:focus {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
+  background: var(--app-input);
+}
+
+.app-primary-btn {
+  background: var(--app-accent);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.18);
+}
+
+.app-primary-btn:hover {
+  background: var(--app-accent-hover);
+}
+
+.app-secondary-btn {
+  border: 1px solid var(--app-line);
+  background: var(--app-card);
+  color: var(--app-muted);
+}
+
+.app-secondary-btn:hover {
+  border-color: rgba(20, 184, 166, 0.45);
+  color: var(--app-accent);
+  background: var(--app-panel);
+}
+
+/* Legacy screen compatibility: several older pages use hard-coded dark Tailwind utilities. */
+.bg-slate-950 {
+  background-color: var(--app-bg) !important;
+}
+
+.bg-slate-900,
+.bg-slate-900\/50,
+.bg-slate-900\/40,
+.bg-slate-900\/30 {
+  background-color: var(--legacy-surface) !important;
+}
+
+.bg-slate-800,
+.bg-slate-800\/60,
+.bg-slate-800\/50,
+.bg-slate-800\/40,
+.bg-slate-800\/30,
+.bg-slate-800\/20 {
+  background-color: var(--legacy-surface-2) !important;
+}
+
+.border-slate-800,
+.border-slate-700,
+.border-white\/10 {
+  border-color: var(--app-line-strong) !important;
+}
+
+.text-slate-100,
+.text-slate-200 {
+  color: var(--app-text) !important;
+}
+
+.text-slate-300 {
+  color: var(--app-muted) !important;
+}
+
+.text-emerald-400,
+.text-emerald-300 {
+  color: var(--app-accent) !important;
+}
+
+.bg-emerald-500,
+.bg-emerald-400 {
+  background-color: var(--app-accent) !important;
+  color: #ffffff !important;
+}
+
+.hover\:bg-emerald-400:hover,
+.hover\:bg-emerald-300:hover {
+  background-color: var(--app-accent-hover) !important;
+}
+
+.bg-white,
+.bg-white\/90,
+.bg-white\/80,
+.bg-white\/70,
+.bg-white\/60,
+.bg-white\/55 {
+  background-color: var(--app-panel) !important;
+}
+
+.bg-slate-50,
+.bg-slate-100 {
+  background-color: var(--legacy-surface-2) !important;
+}
+
+.bg-teal-50,
+.hover\:bg-teal-50\/35:hover {
+  background-color: var(--app-accent-soft) !important;
+}
+
+.border-slate-200,
+.border-slate-300,
+.border-teal-200 {
+  border-color: var(--app-line-strong) !important;
+}
+
+.text-slate-950,
+.text-slate-900,
+.text-slate-800 {
+  color: #f8fafc !important;
+}
+
+.text-slate-700,
+.text-slate-600,
+.text-slate-500 {
+  color: #cbd5e1 !important;
+}
+
+.text-teal-900,
+.text-teal-800,
+.text-teal-700 {
+  color: var(--app-accent) !important;
+}
+
+.shadow-slate-200\/60,
+.shadow-teal-100 {
+  --tw-shadow-color: rgba(0, 0, 0, 0.28) !important;
+}

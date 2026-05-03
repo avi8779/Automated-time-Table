@@ -9,6 +9,8 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { AuthProvider } from "./context/AuthContext.jsx";
 
+document.documentElement.dataset.theme = "dark";
+
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <Provider store={store}>

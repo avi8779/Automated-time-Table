@@ -2,6 +2,7 @@ import asyncHandler from "../middleware/asyncHandler.middleware.js";
 import AppError from "../utils/appError.js";
 import {
   generateTimetable,
+  sendTimetableEmail,
   getTimetableForSection,
   getAllTimetables,
   getSectionsWithDepartment,
@@ -11,12 +12,17 @@ import {
 /* POST /api/v1/timetables/generate */
 export const generateTimetableController = async (req, res) => {
   try {
-    const result = await generateTimetable();
+    const result = await generateTimetable(req.body || {});
     res.status(201).json({
       success:       true,
       message:       result.message,
       assignedCount: result.assignedCount,
+      score:         result.score,
       unassigned:    result.unassigned,
+      assignmentIssues: result.assignmentIssues,
+      debugLogs:     result.debugLogs,
+      debugInfo:     result.debugInfo,
+      email:         result.email,
     });
   } catch (error) {
     console.error("=== TIMETABLE GENERATION ERROR ===");
@@ -29,6 +35,27 @@ export const generateTimetableController = async (req, res) => {
       success: false,
       message: error.message || "Timetable generation failed",
       sql:     error.sql     || undefined,
+    });
+  }
+};
+
+/* POST /api/v1/timetables/send-timetable-email */
+export const sendTimetableEmailController = async (req, res) => {
+  try {
+    const result = await sendTimetableEmail(req.body || {});
+    res.json({
+      success: true,
+      message: "Emails sent successfully",
+      email: {
+        ...result,
+        blocked: false,
+        issues: [],
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to send timetable emails",
     });
   }
 };

@@ -1,59 +1,72 @@
-import { useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { teacherSlice, roomSlice, courseSlice, departmentSlice, subjectSlice, sectionSlice } from '../Redux/store';
+import { useEffect } from "react";
+import { Link } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { FiBookOpen, FiBriefcase, FiCalendar, FiClock, FiGrid, FiMap, FiUsers } from "react-icons/fi";
+import { teacherSlice, roomSlice, courseSlice, departmentSlice, subjectSlice, sectionSlice } from "../Redux/store";
 
 const statCards = [
-  { label: 'Departments', sliceKey: 'department', icon: '🏛', color: 'emerald' },
-  { label: 'Teachers',    sliceKey: 'teacher',    icon: '👨‍🏫', color: 'sky' },
-  { label: 'Courses',     sliceKey: 'course',     icon: '📚', color: 'violet' },
-  { label: 'Rooms',       sliceKey: 'room',       icon: '🚪', color: 'amber' },
-  { label: 'Subjects',    sliceKey: 'subject',    icon: '📖', color: 'rose' },
-  { label: 'Sections',    sliceKey: 'section',    icon: '🗂', color: 'teal' },
+  { label: "Departments", sliceKey: "department", icon: FiBriefcase, tone: "emerald" },
+  { label: "Teachers", sliceKey: "teacher", icon: FiUsers, tone: "sky" },
+  { label: "Courses", sliceKey: "course", icon: FiBookOpen, tone: "violet" },
+  { label: "Rooms", sliceKey: "room", icon: FiMap, tone: "amber" },
+  { label: "Subjects", sliceKey: "subject", icon: FiBookOpen, tone: "rose" },
+  { label: "Sections", sliceKey: "section", icon: FiGrid, tone: "teal" },
 ];
 
-const colorMap = {
-  emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
-  sky:     { bg: 'bg-sky-500/10',     text: 'text-sky-400',     border: 'border-sky-500/20' },
-  violet:  { bg: 'bg-violet-500/10',  text: 'text-violet-400',  border: 'border-violet-500/20' },
-  amber:   { bg: 'bg-amber-500/10',   text: 'text-amber-400',   border: 'border-amber-500/20' },
-  rose:    { bg: 'bg-rose-500/10',    text: 'text-rose-400',    border: 'border-rose-500/20' },
-  teal:    { bg: 'bg-teal-500/10',    text: 'text-teal-400',    border: 'border-teal-500/20' },
+const toneMap = {
+  emerald: "from-emerald-400/20 to-emerald-400/5 text-emerald-200 border-emerald-300/20",
+  sky: "from-sky-400/20 to-sky-400/5 text-sky-200 border-sky-300/20",
+  violet: "from-violet-400/20 to-violet-400/5 text-violet-200 border-violet-300/20",
+  amber: "from-amber-400/20 to-amber-400/5 text-amber-200 border-amber-300/20",
+  rose: "from-rose-400/20 to-rose-400/5 text-rose-200 border-rose-300/20",
+  teal: "from-teal-400/20 to-teal-400/5 text-teal-200 border-teal-300/20",
 };
 
-function StatCard({ label, sliceKey, icon, color }) {
+const quickLinks = [
+  { to: "/teacher/create", icon: FiUsers, label: "Add Teacher", description: "Register faculty and teaching limits" },
+  { to: "/course/create", icon: FiBookOpen, label: "Add Course", description: "Create courses under departments" },
+  { to: "/section/create", icon: FiGrid, label: "Add Section", description: "Manage batches, semesters, and strength" },
+  { to: "/room/create", icon: FiMap, label: "Add Room", description: "Create classrooms and labs" },
+  { to: "/subject/create", icon: FiBookOpen, label: "Add Subject", description: "Define theory and lab subjects" },
+  { to: "/timetable", icon: FiCalendar, label: "Generate Timetable", description: "Build schedules by section or department" },
+];
+
+function StatCard({ label, sliceKey, icon: Icon, tone }) {
   const count = useSelector((state) => state[sliceKey]?.data?.length ?? 0);
-  const c = colorMap[color];
 
   return (
-    <div className={`bg-slate-900 border ${c.border} rounded-xl p-5 flex items-center gap-4 hover:bg-slate-800/60 transition-colors`}>
-      <div className={`w-12 h-12 rounded-xl ${c.bg} flex items-center justify-center text-2xl shrink-0`}>
-        {icon}
-      </div>
-      <div>
-        <p className="text-2xl font-bold text-slate-100">{count}</p>
-        <p className="text-sm text-slate-400">{label}</p>
+    <div className={`rounded-2xl border bg-gradient-to-br ${toneMap[tone]} p-5 shadow-sm`}>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-400">{label}</p>
+          <p className="mt-2 text-3xl font-black tracking-tight text-white">{count}</p>
+        </div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+          <Icon className="h-5 w-5" />
+        </div>
       </div>
     </div>
   );
 }
 
-function QuickLink({ to, icon, label, description, color }) {
-  const c = colorMap[color];
+function QuickLink({ to, icon: Icon, label, description }) {
   return (
-    <a href={to} className={`block p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-${color}-500/30 hover:bg-slate-800/60 transition-all group`}>
-      <div className="flex items-center gap-3 mb-2">
-        <span className={`text-xl ${c.text}`}>{icon}</span>
-        <span className="text-sm font-semibold text-slate-200 group-hover:text-white transition-colors">{label}</span>
+    <Link
+      to={to}
+      className="app-card group rounded-2xl p-4 transition hover:-translate-y-0.5 hover:border-teal-300/30 hover:bg-white/[0.06]"
+    >
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-teal-400/10 text-teal-200">
+        <Icon className="h-5 w-5" />
       </div>
-      <p className="text-xs text-slate-500">{description}</p>
-    </a>
+      <p className="text-sm font-bold text-slate-100">{label}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+    </Link>
   );
 }
 
 export default function Dashboard() {
   const dispatch = useDispatch();
 
-  // Fetch all data for stat counts
   useEffect(() => {
     dispatch(teacherSlice.actions.getAll());
     dispatch(roomSlice.actions.getAll());
@@ -64,60 +77,48 @@ export default function Dashboard() {
   }, [dispatch]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
-      <div className="max-w-6xl mx-auto space-y-8">
-
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-slate-100">Dashboard</h1>
-          <p className="text-slate-400 mt-1 text-sm">Welcome back, Admin — here's your system overview.</p>
-        </div>
-
-        {/* Stat Cards */}
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Overview</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {statCards.map((card) => (
-              <StatCard key={card.sliceKey} {...card} />
-            ))}
-          </div>
-        </div>
-
-        {/* Quick Links */}
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Quick Access</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <QuickLink to="/teachers/create"    icon="👨‍🏫" label="Add Teacher"    description="Register a new teacher and assign subjects"  color="sky" />
-            <QuickLink to="/courses"     icon="📚"  label="Add Course"     description="Create a new course under a department"       color="violet" />
-            <QuickLink to="/sections"    icon="🗂"  label="Add Section"    description="Create sections for a course and semester"    color="teal" />
-            <QuickLink to="/rooms"       icon="🚪"  label="Add Room"       description="Register a classroom or lab in a building"    color="amber" />
-            <QuickLink to="/subjects"    icon="📖"  label="Add Subject"    description="Add a subject and link it to a course"        color="rose" />
-            <QuickLink to="/time-slots"  icon="🕐"  label="Manage Slots"   description="Configure daily time slots and breaks"        color="emerald" />
-          </div>
-        </div>
-
-        {/* System Info */}
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">System</h2>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-wrap gap-6">
+    <div className="app-page">
+      <div className="app-container space-y-8">
+        <section className="app-panel overflow-hidden rounded-3xl p-6 lg:p-8">
+          <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr] lg:items-center">
             <div>
-              <p className="text-xs text-slate-500 mb-1">Version</p>
-              <p className="text-sm font-medium text-slate-200">v1.0.0</p>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-300">Academic operations</p>
+              <h1 className="mt-3 text-3xl font-black tracking-tight text-white lg:text-4xl">
+                Automated Timetable Dashboard
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+                Manage departments, rooms, courses, sections, staff, and schedule generation from one focused workspace.
+              </p>
             </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Status</p>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <p className="text-sm font-medium text-emerald-400">Online</p>
+            <div className="rounded-2xl border border-teal-300/20 bg-teal-400/10 p-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-400 text-slate-950">
+                  <FiClock className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-teal-100">System online</p>
+                  <p className="text-xs text-teal-200/70">Ready for timetable generation</p>
+                </div>
               </div>
             </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">API</p>
-              <p className="text-sm font-medium text-slate-200">localhost:5014</p>
-            </div>
           </div>
-        </div>
+        </section>
 
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">Overview</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {statCards.map((card) => <StatCard key={card.sliceKey} {...card} />)}
+          </div>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.18em] text-slate-500">Quick access</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {quickLinks.map((link) => <QuickLink key={link.to} {...link} />)}
+          </div>
+        </section>
       </div>
     </div>
   );

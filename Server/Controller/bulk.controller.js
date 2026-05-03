@@ -1,5 +1,6 @@
 import xlsx from "xlsx";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import { pool } from "../config/dbConn.js";
 
 /* ── HELPER: parse uploaded file buffer → array of row objects ── */
@@ -35,6 +36,20 @@ const duplicateInFile = (seen, key, message, rowNo, errors) => {
 };
 const insertErrorMessage = (err, duplicateMessage) =>
   err.code === "ER_DUP_ENTRY" ? duplicateMessage : err.message;
+const generateTeacherCodeCandidate = () => `T${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+const generateUniqueTeacherCode = async (seen) => {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const teacherCode = generateTeacherCodeCandidate();
+    if (seen.has(teacherCode.toLowerCase())) continue;
+
+    const [existing] = await pool.query(
+      "SELECT teacher_id FROM teachers WHERE teacher_code = ? LIMIT 1",
+      [teacherCode]
+    );
+    if (!existing.length) return teacherCode;
+  }
+  throw new Error("Could not generate a unique teacher_code");
+};
 const getBuildingCodeStatus = async (building_code) => {
   const [rows] = await pool.query(
     "SELECT building_id, is_deleted FROM buildings WHERE building_code = ? LIMIT 1",
@@ -199,42 +214,41 @@ export const bulkTeachers = async (req, res) => {
 
     for (const [i, row] of rows.entries()) {
       const rowNo = i + 2;
+      if (Object.values(row).every((value) => str(value) === "")) continue;
+      let teacher_code        = str(row["teacher_code"]      || row["Teacher Code"]      || row["code"]);
       const name              = str(row["name"]              || row["Name"]);
       const email             = str(row["email"]             || row["Email"]);
-      const phone             = str(row["phone"]             || row["Phone"]             || "");
-      const qualification     = str(row["qualification"]     || row["Qualification"]     || "");
-      const specialization    = str(row["specialization"]    || row["Specialization"]    || "");
       const max_hours_per_day = num(row["max_hours_per_day"] || row["Max Hours/Day"]     || 6);
       const max_hours_per_week= num(row["max_hours_per_week"]|| row["Max Hours/Week"]    || 30);
-      const password_plain    = str(row["password"]          || row["Password"]          || "teacher123");
       const dept_code         = str(row["department_code"]   || row["Department Code"]   || "");
 
-      if (!name || !email) {
-        errors.push(`Row ${rowNo}: name and email are required`); skipped++; continue;
+      if (!name || !email || !dept_code) {
+        errors.push(`Row ${rowNo}: name, email and department_code are required`); skipped++; continue;
       }
-      if (duplicateInFile(seen, email, `email "${email}" appears more than once`, rowNo, errors)) {
+      if (!teacher_code) {
+        teacher_code = await generateUniqueTeacherCode(seen);
+      }
+      if (duplicateInFile(seen, teacher_code, `teacher_code "${teacher_code}" appears more than once`, rowNo, errors)) {
         skipped++;
         continue;
       }
 
-      let depart_id = null;
-      if (dept_code) {
-        const [d] = await pool.query("SELECT depart_id FROM department WHERE department_code=?", [dept_code]);
-        if (d.length) depart_id = d[0].depart_id;
+      const [d] = await pool.query("SELECT depart_id FROM department WHERE department_code=? AND is_deleted=0", [dept_code]);
+      if (!d.length) {
+        errors.push(`Row ${rowNo}: department_code "${dept_code}" not found`); skipped++; continue;
       }
-
-      const hashed = await bcrypt.hash(password_plain, 10);
+      const depart_id = d[0].depart_id;
 
       try {
         await pool.query(
           `INSERT INTO teachers
-           (name, email, phone, qualification, specialization, max_hours_per_day, max_hours_per_week, password, depart_id)
-           VALUES (?,?,?,?,?,?,?,?,?)`,
-          [name, email, phone, qualification, specialization, max_hours_per_day, max_hours_per_week, hashed, depart_id]
+           (teacher_code, name, email, depart_id, max_hours_per_day, max_hours_per_week)
+           VALUES (?,?,?,?,?,?)`,
+          [teacher_code, name, email, depart_id, max_hours_per_day, max_hours_per_week]
         );
         inserted++;
       } catch (err) {
-        errors.push(`Row ${rowNo}: ${insertErrorMessage(err, `email "${email}" already exists`)}`);
+        errors.push(`Row ${rowNo}: ${insertErrorMessage(err, `teacher_code "${teacher_code}" or email "${email}" already exists`)}`);
         skipped++;
       }
     }
@@ -328,6 +342,31 @@ export const bulkSections = async (req, res) => {
       const [c] = await pool.query("SELECT course_id FROM courses WHERE course_code=?", [course_code]);
       if (c.length) course_id = c[0].course_id;
       else { errors.push(`Row ${rowNo}: course_code "${course_code}" not found`); skipped++; continue; }
+
+      const [existing] = await pool.query(
+        `SELECT section_id, is_deleted
+         FROM sections
+         WHERE course_id = ? AND batch_year = ? AND section_name = ?
+         LIMIT 1`,
+        [course_id, batch_year, section_name]
+      );
+
+      if (existing[0]?.is_deleted) {
+        await pool.query(
+          `UPDATE sections
+           SET semester = ?, strength = ?, max_slots_per_day = ?, status = ?, is_deleted = 0
+           WHERE section_id = ?`,
+          [semester, strength, max_slots_per_day, status, existing[0].section_id]
+        );
+        inserted++;
+        continue;
+      }
+
+      if (existing[0]) {
+        errors.push(`Row ${rowNo}: section_name "${section_name}" already exists`);
+        skipped++;
+        continue;
+      }
 
       try {
         await pool.query(
@@ -449,7 +488,7 @@ const TEMPLATES = {
   buildings:       [{ building_name: "Main Block",  building_code: "MB", floors: 3 }],
   rooms:           [{ room_no: "R-101", room_type: "CLASSROOM", capacity: 60, building_code: "MB" }],
   courses:         [{ course_name: "B.Tech CSE", course_code: "BTCSE", department_code: "CSE", duration_years: 4 }],
-  teachers:        [{ name: "Dr. Smith", email: "smith@college.com", max_hours_per_day: 6, max_hours_per_week: 30, password: "teacher123", department_code: "CSE" }],
+  teachers:        [{ name: "Dr. Smith", email: "smith@college.com", max_hours_per_day: 6, max_hours_per_week: 30, department_code: "CSE" }],
   subjects:        [{ subject_name: "Data Structures", subject_code: "CS301", course_code: "BTCSE", semester: 3, weekly_hours: 4, credits: 4, is_lab: 0, preferred_slot: "ANY" }],
   sections:        [{ section_name: "CSE-A", course_code: "BTCSE", semester: 3, strength: 60, batch_year: 2024, max_slots_per_day: 6, status: "ACTIVE" }],
   students:        [{ name: "John Doe", roll_number: "2024001", section_name: "CSE-A", password: "student123" }],

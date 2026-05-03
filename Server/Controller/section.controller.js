@@ -3,9 +3,12 @@ import {
   courseExistsById,
   createSection,
   getAllSections,
+  getDeletedSections,
   getSectionById,
   updateSection,
   softDeleteSection,
+  restoreSection,
+  restoreSectionWithData,
 } from "../model/section.model.js";
 
 const sectionConflictMessage = (section_name) =>
@@ -42,7 +45,20 @@ export const createSectionController = async (req, res) => {
 
     const conflict = await getSectionConflict(course_id, batch_year, section_name);
     if (conflict?.is_deleted) {
-      return res.status(409).json({ success: false, message: deletedSectionConflictMessage(section_name) });
+      const restored = await restoreSectionWithData(conflict.section_id, {
+        section_name, course_id, semester, strength,
+        batch_year, max_slots_per_day: max_slots_per_day ?? 6, status,
+      });
+
+      if (!restored) {
+        return res.status(409).json({ success: false, message: deletedSectionConflictMessage(section_name) });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Section restored successfully",
+        section_id: conflict.section_id,
+      });
     }
     if (conflict) {
       return res.status(409).json({ success: false, message: sectionConflictMessage(section_name) });
@@ -116,6 +132,16 @@ export const updateSectionController = async (req, res) => {
   }
 };
 
+export const getDeletedSectionsController = async (req, res) => {
+  try {
+    const sections = await getDeletedSections();
+    res.status(200).json({ success: true, count: sections.length, data: sections });
+  } catch (error) {
+    console.error("Get Deleted Sections Error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 export const deleteSectionController = async (req, res) => {
   try {
     const affectedRows = await softDeleteSection(req.params.id);
@@ -123,5 +149,18 @@ export const deleteSectionController = async (req, res) => {
     res.status(200).json({ success: true, message: "Section deleted successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const restoreSectionController = async (req, res) => {
+  try {
+    const affectedRows = await restoreSection(req.params.id);
+    if (!affectedRows) {
+      return res.status(404).json({ success: false, message: "Section not found or already active" });
+    }
+    res.status(200).json({ success: true, message: "Section restored successfully" });
+  } catch (error) {
+    console.error("Restore Section Error:", error);
+    return handleSectionError(res, error);
   }
 };

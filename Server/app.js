@@ -16,6 +16,7 @@ import roomRoutes           from "./routes/room.route.js";
 import authRoutes           from "./routes/auth.route.js";
 import bulkRoutes           from "./routes/bulk.route.js";
 import notifyRoutes         from "./routes/notify.routes.js";
+import { sendTimetableEmailController } from "./Controller/timetable.controller.js";
 import errorMiddleware      from "./middleware/error.middleware.js";
 import AppError             from "./utils/appError.js";
 import { protect, restrictTo } from "./middleware/auth.middleware.js";
@@ -71,6 +72,7 @@ app.use("/api/v1/notify", notifyRoutes);
 
 /* ── PROTECTED: Timetable — all roles can read, only admin can generate ── */
 app.use("/api/v1/timetables", protect, timetablesRoutes);
+app.post("/api/v1/send-timetable-email", protect, restrictTo("admin"), sendTimetableEmailController);
 
 /* ── HEALTH CHECK ── */
 app.get("/ping", (_req, res) => res.json({ status: "ok" }));

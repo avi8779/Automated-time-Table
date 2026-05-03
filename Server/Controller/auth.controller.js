@@ -116,12 +116,12 @@ export const studentLogin = async (req, res) => {
 /* ── ADMIN: Create student  POST /api/v1/auth/students ── */
 export const createStudentController = async (req, res) => {
   try {
-    const { roll_number, password, name, section_id } = req.body;
-    if (!roll_number || !password || !name || !section_id)
+    const { roll_number, password, name, email, section_id } = req.body;
+    if (!roll_number || !password || !name || !email || !section_id)
       return res.status(400).json({ success: false, message: "All fields required" });
 
     const hashed = await bcrypt.hash(password, 10);
-    const id = await createStudent({ roll_number, password: hashed, name, section_id });
+    const id = await createStudent({ roll_number, password: hashed, name, email, section_id });
     res.status(201).json({ success: true, message: "Student created", student_id: id });
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY")

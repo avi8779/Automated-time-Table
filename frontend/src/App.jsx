@@ -28,8 +28,8 @@ export default function App() {
   const { user, ready } = useAuth();
 
   if (!ready) return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-      <div className="text-slate-400 animate-pulse text-sm">Loading…</div>
+    <div className="app-shell min-h-screen flex items-center justify-center">
+      <div className="text-slate-500 animate-pulse text-sm">Loading...</div>
     </div>
   );
 
@@ -54,7 +54,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-950 overflow-hidden">
+    <div className="app-shell flex h-screen overflow-hidden">
       <Navbar />
       <main className="flex-1 overflow-y-auto">
         <Routes>

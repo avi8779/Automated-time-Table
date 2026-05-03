@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FiEye, FiEyeOff, FiKey } from "react-icons/fi";
 import axiosInstance from "../Helper/axiosInstance";
 import { useAuth } from "../context/useAuth";
 import { toast } from "react-toastify";
@@ -8,7 +9,7 @@ export default function ChangePassword() {
   const { user, login, token } = useAuth();
   const navigate = useNavigate();
 
-  const [form, setForm]       = useState({ newPassword: "", confirm: "" });
+  const [form, setForm] = useState({ newPassword: "", confirm: "" });
   const [loading, setLoading] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showCon, setShowCon] = useState(false);
@@ -16,24 +17,20 @@ export default function ChangePassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (form.newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters"); return;
+      toast.error("Password must be at least 6 characters");
+      return;
     }
     if (form.newPassword !== form.confirm) {
-      toast.error("Passwords do not match"); return;
+      toast.error("Passwords do not match");
+      return;
     }
+
     setLoading(true);
     try {
       await axiosInstance.put("/notify/change-password", { newPassword: form.newPassword });
       toast.success("Password changed successfully!");
-
-      // Update user in context — clear mustChangePassword flag
-      const updatedUser = { ...user, mustChangePassword: false };
-      login(updatedUser, token);
-
-      // Redirect to correct dashboard
-      if (user.role === "admin")         navigate("/");
-      else if (user.role === "teacher")  navigate("/my-timetable");
-      else                               navigate("/my-timetable");
+      login({ ...user, mustChangePassword: false }, token);
+      navigate(user.role === "admin" ? "/" : "/my-timetable");
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to change password");
     } finally {
@@ -42,92 +39,99 @@ export default function ChangePassword() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+    <div className="app-shell flex min-h-screen items-center justify-center p-4 text-slate-900">
       <div className="w-full max-w-md">
-
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="text-4xl mb-3">🔑</div>
-          <h1 className="text-2xl font-bold text-slate-100">Change Password</h1>
-          <p className="text-slate-400 text-sm mt-2">
-            Hi <span className="text-emerald-400 font-semibold">{user?.name}</span>,
-            you need to set a new password before continuing.
+        <div className="mb-7 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-700 text-white">
+            <FiKey className="h-5 w-5" />
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-slate-950">Change Password</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Hi <span className="font-semibold text-teal-700">{user?.name}</span>, set a new password before continuing.
           </p>
         </div>
 
-        <div className="bg-slate-900 border border-amber-700/30 rounded-2xl p-6 shadow-2xl">
-          <div className="flex items-center gap-2 mb-5 px-3 py-2.5 bg-amber-900/20 rounded-lg">
-            <span>⚠️</span>
-            <p className="text-xs text-amber-300">Your temporary password must be changed before you can access the system.</p>
+        <div className="app-panel rounded-3xl p-6">
+          <div className="mb-5 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3">
+            <p className="text-xs leading-5 text-amber-200">Your temporary password must be changed before you can access the system.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-slate-400 block mb-1.5">
-                New Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showNew ? "text" : "password"}
-                  value={form.newPassword}
-                  onChange={(e) => setForm((f) => ({ ...f, newPassword: e.target.value }))}
-                  placeholder="At least 6 characters"
-                  className="w-full px-4 py-2.5 pr-10 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-emerald-500"
-                />
-                <button type="button" onClick={() => setShowNew((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm">
-                  {showNew ? "🙈" : "👁️"}
-                </button>
-              </div>
-              {/* Password strength */}
-              {form.newPassword && (
-                <div className="mt-1.5 flex gap-1">
-                  {[1,2,3,4].map((n) => (
-                    <div key={n} className={`h-1 flex-1 rounded ${
-                      form.newPassword.length >= n * 3
-                        ? n <= 1 ? "bg-red-500" : n <= 2 ? "bg-amber-500" : n <= 3 ? "bg-blue-500" : "bg-emerald-500"
-                        : "bg-slate-700"
-                    }`} />
-                  ))}
-                </div>
-              )}
-            </div>
+            <PasswordField
+              label="New Password"
+              value={form.newPassword}
+              onChange={(value) => setForm((f) => ({ ...f, newPassword: value }))}
+              visible={showNew}
+              onToggle={() => setShowNew((s) => !s)}
+              placeholder="At least 6 characters"
+            />
 
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-slate-400 block mb-1.5">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showCon ? "text" : "password"}
-                  value={form.confirm}
-                  onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))}
-                  placeholder="Repeat new password"
-                  className={`w-full px-4 py-2.5 pr-10 rounded-lg bg-slate-800 border text-slate-100 text-sm focus:outline-none ${
-                    form.confirm && form.confirm !== form.newPassword
-                      ? "border-red-500 focus:border-red-500"
-                      : "border-slate-700 focus:border-emerald-500"
-                  }`}
-                />
-                <button type="button" onClick={() => setShowCon((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm">
-                  {showCon ? "🙈" : "👁️"}
-                </button>
+            {form.newPassword && (
+              <div className="flex gap-1">
+                {[1, 2, 3, 4].map((n) => (
+                  <div
+                    key={n}
+                    className={`h-1 flex-1 rounded ${
+                      form.newPassword.length >= n * 3
+                        ? n <= 1 ? "bg-rose-500" : n <= 2 ? "bg-amber-500" : n <= 3 ? "bg-sky-500" : "bg-emerald-400"
+                        : "bg-slate-700"
+                    }`}
+                  />
+                ))}
               </div>
-              {form.confirm && form.confirm !== form.newPassword && (
-                <p className="text-xs text-red-400 mt-1">Passwords do not match</p>
-              )}
-            </div>
+            )}
+
+            <PasswordField
+              label="Confirm Password"
+              value={form.confirm}
+              onChange={(value) => setForm((f) => ({ ...f, confirm: value }))}
+              visible={showCon}
+              onToggle={() => setShowCon((s) => !s)}
+              placeholder="Repeat new password"
+              invalid={!!form.confirm && form.confirm !== form.newPassword}
+            />
+
+            {form.confirm && form.confirm !== form.newPassword && (
+              <p className="text-xs text-rose-300">Passwords do not match</p>
+            )}
 
             <button
               type="submit"
               disabled={loading || !form.newPassword || !form.confirm}
-              className="w-full py-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-colors disabled:opacity-40 mt-2"
+              className="app-primary-btn mt-2 w-full rounded-2xl py-3 text-sm font-black transition disabled:opacity-40"
             >
-              {loading ? "Changing…" : "Set New Password & Continue →"}
+              {loading ? "Changing..." : "Set New Password and Continue"}
             </button>
           </form>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PasswordField({ label, value, onChange, visible, onToggle, placeholder, invalid }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`app-input w-full rounded-2xl px-4 py-3 pr-12 text-sm ${
+            invalid ? "border-rose-400 focus:border-rose-400" : ""
+          }`}
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-500 hover:text-slate-200"
+        >
+          {visible ? <FiEyeOff /> : <FiEye />}
+        </button>
       </div>
     </div>
   );

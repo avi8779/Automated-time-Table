@@ -1,15 +1,20 @@
-import { useState, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FiCalendar, FiClock, FiMapPin, FiUser } from "react-icons/fi";
 import axiosInstance from "../Helper/axiosInstance";
 import { toast } from "react-toastify";
 
 const DAYS_ORDER = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const DAY_LABELS = { MON: "Monday", TUE: "Tuesday", WED: "Wednesday", THU: "Thursday", FRI: "Friday", SAT: "Saturday" };
 
+function timeRange(row) {
+  return `${String(row.start_time).slice(0, 5)} - ${String(row.end_time).slice(0, 5)}`;
+}
+
 function TeacherTimetable() {
-  const [teachers,        setTeachers]        = useState([]);
+  const [teachers, setTeachers] = useState([]);
   const [selectedTeacher, setSelectedTeacher] = useState("");
-  const [timetableData,   setTimetableData]   = useState([]);
-  const [loading,         setLoading]         = useState(false);
+  const [timetableData, setTimetableData] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     axiosInstance
@@ -43,108 +48,124 @@ function TeacherTimetable() {
     fetchTimetable(e.target.value);
   };
 
-  const byDay = DAYS_ORDER.reduce((acc, day) => {
+  const byDay = useMemo(() => DAYS_ORDER.reduce((acc, day) => {
     acc[day] = timetableData
-      .filter((r) => r.day === day)
+      .filter((row) => row.day === day)
       .sort((a, b) => (a.slot_order ?? 0) - (b.slot_order ?? 0));
     return acc;
-  }, {});
-  const activeDays = DAYS_ORDER.filter((d) => byDay[d].length > 0);
+  }, {}), [timetableData]);
 
-  const selectedTeacherObj = teachers.find(
-    (t) => String(t.teacher_id) === String(selectedTeacher)
-  );
+  const activeDays = DAYS_ORDER.filter((day) => byDay[day].length > 0);
+  const selectedTeacherObj = teachers.find((teacher) => String(teacher.teacher_id) === String(selectedTeacher));
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Teacher Timetable</h1>
-          <p className="text-slate-400 text-sm mt-1">Select a teacher to view their weekly schedule</p>
-        </div>
+    <div className="app-page">
+      <div className="app-container max-w-6xl space-y-6">
+        <section className="app-panel rounded-3xl p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-300">Faculty schedule</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-white">Teacher Timetable</h1>
+              <p className="mt-2 text-sm text-slate-400">Select a teacher to view their weekly teaching load.</p>
+            </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <label className="text-xs font-semibold uppercase tracking-widest text-slate-400 block mb-2">
-            Select Teacher
-          </label>
-          <select
-            value={selectedTeacher}
-            onChange={handleTeacherChange}
-            className="w-full sm:w-80 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
-          >
-            <option value="">— choose teacher —</option>
-            {teachers.map((t) => (
-              <option key={t.teacher_id} value={t.teacher_id}>{t.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {selectedTeacherObj && timetableData.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs font-semibold text-slate-300">👨‍🏫 {selectedTeacherObj.name}</span>
-            <span className="text-xs bg-emerald-900/50 text-emerald-300 px-2.5 py-1 rounded-full font-bold">
-              {timetableData.length} total slots/week
-            </span>
-            <span className="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full">
-              {activeDays.length} working days
-            </span>
+            <div className="w-full lg:w-80">
+              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                Select Teacher
+              </label>
+              <select
+                value={selectedTeacher}
+                onChange={handleTeacherChange}
+                className="app-input w-full rounded-xl px-3 py-2.5 text-sm"
+              >
+                <option value="">- choose teacher -</option>
+                {teachers.map((teacher) => (
+                  <option key={teacher.teacher_id} value={teacher.teacher_id}>{teacher.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
+        </section>
+
+        {selectedTeacherObj && (
+          <section className="grid gap-3 sm:grid-cols-3">
+            <Summary icon={FiUser} label="Teacher" value={selectedTeacherObj.name} />
+            <Summary icon={FiCalendar} label="Total slots" value={timetableData.length} />
+            <Summary icon={FiClock} label="Working days" value={activeDays.length} />
+          </section>
         )}
 
         {loading ? (
-          <div className="py-16 text-center text-slate-500 text-sm animate-pulse">Loading timetable…</div>
+          <div className="py-16 text-center text-sm text-slate-500 animate-pulse">Loading timetable...</div>
         ) : selectedTeacher && timetableData.length === 0 ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl py-16 text-center">
-            <p className="text-slate-400 text-sm">No timetable assigned to this teacher.</p>
+          <div className="app-panel rounded-3xl py-16 text-center">
+            <p className="text-sm font-semibold text-slate-300">No timetable assigned to this teacher.</p>
           </div>
         ) : (
-          activeDays.map((day) => (
-            <div key={day} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="px-5 py-3 bg-slate-800/60 border-b border-slate-800 flex items-center gap-3">
-                <span className="text-xs font-bold uppercase tracking-widest text-emerald-400 w-10">{day}</span>
-                <span className="text-sm text-slate-300 font-medium">{DAY_LABELS[day]}</span>
-                {byDay[day][0]?.class_date && (
-                  <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded font-mono">
-                    {new Date(byDay[day][0].class_date).toLocaleDateString("en-IN", {
-                      day: "2-digit", month: "short", year: "numeric"
-                    })}
+          <div className="space-y-4">
+            {activeDays.map((day) => (
+              <section key={day} className="app-panel overflow-hidden rounded-3xl">
+                <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-4">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-400/10 text-xs font-black text-teal-300">
+                    {day}
                   </span>
-                )}
-                <span className="text-xs text-slate-500 ml-auto">
-                  {byDay[day].length} slot{byDay[day].length !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <div className="divide-y divide-slate-800/60">
-                {byDay[day].map((row) => (
-                  <div key={row.timetable_id}
-                    className="px-5 py-4 grid grid-cols-1 sm:grid-cols-4 gap-3 hover:bg-slate-800/20 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono bg-slate-800 text-slate-300 px-2 py-1 rounded">
-                        {String(row.start_time).slice(0,5)} – {String(row.end_time).slice(0,5)}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-100">{row.subject_name}</p>
-                      {row.is_lab && <span className="text-xs bg-violet-900/50 text-violet-300 px-1.5 py-0.5 rounded mt-0.5 inline-block">Lab</span>}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                      <span>👥</span><span>{row.section_name}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                      <span>🚪</span><span>{row.room_no}</span>
-                      {row.room_type && row.room_type !== "CLASSROOM" && (
-                        <span className="text-slate-600">({row.room_type})</span>
-                      )}
-                    </div>
+                  <div>
+                    <h2 className="text-base font-bold text-white">{DAY_LABELS[day]}</h2>
+                    <p className="text-xs text-slate-500">{byDay[day].length} slot{byDay[day].length !== 1 ? "s" : ""}</p>
                   </div>
-                ))}
-              </div>
-            </div>
-          ))
+                </div>
+
+                <div className="divide-y divide-slate-800/80">
+                  {byDay[day].map((row) => (
+                    <article
+                      key={row.timetable_id}
+                      className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.03] sm:grid-cols-[150px_1fr_170px_140px]"
+                    >
+                      <span className="w-fit rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs text-slate-300">
+                        {timeRange(row)}
+                      </span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-bold text-white">{row.subject_name}</h3>
+                          {Number(row.is_lab) === 1 ? (
+                            <span className="rounded-full bg-violet-400/15 px-2 py-0.5 text-[11px] font-bold text-violet-200">Lab</span>
+                          ) : (
+                            <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[11px] font-bold text-emerald-200">Theory</span>
+                          )}
+                        </div>
+                      </div>
+                      <Pill icon={FiUser} text={row.section_name} />
+                      <Pill icon={FiMapPin} text={row.room_no} />
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         )}
       </div>
     </div>
+  );
+}
+
+function Summary({ icon: Icon, label, value }) {
+  return (
+    <div className="app-panel rounded-2xl p-4">
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-teal-400/10 text-teal-300">
+        <Icon className="h-4 w-4" />
+      </div>
+      <p className="truncate text-lg font-black text-white">{value}</p>
+      <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+function Pill({ icon: Icon, text }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-300">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+      <span className="truncate">{text || "-"}</span>
+    </span>
   );
 }
 

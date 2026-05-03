@@ -241,7 +241,7 @@ function CrudForm({
   };
 
   const renderField = (field) => {
-    const cls = "w-full px-3 py-2 rounded bg-slate-900 border border-slate-800 focus:outline-none focus:border-emerald-500 text-sm text-slate-100";
+    const cls = "app-input w-full px-3 py-2 rounded-xl text-sm";
     if (field.type === "select") {
       const opts = field.options ?? dynamicOptions[field.name] ?? [];
       const currentVal = form[field.name] ?? "";
@@ -282,13 +282,13 @@ function CrudForm({
 
   // ── Pagination controls ──
   const PaginationBar = () => (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-800 bg-slate-900/50">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-slate-50/80">
       <div className="flex items-center gap-2 text-xs text-slate-400">
         <span>Show</span>
         <select
           value={pageSize}
           onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-          className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none"
+          className="app-input px-2 py-1 rounded"
         >
           {PAGE_SIZE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
@@ -312,25 +312,26 @@ function CrudForm({
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="app-page">
+      <div className="app-container">
 
         {/* Header */}
-        <div className="flex flex-wrap justify-between items-start gap-3 mb-6">
+        <div className="app-panel flex flex-wrap justify-between items-start gap-3 mb-6 rounded-3xl p-5">
           <div>
-            <h1 className="text-2xl font-semibold">{title}</h1>
-            <p className="text-slate-400 text-sm">{description}</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Management</p>
+            <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{title}</h1>
+            <p className="mt-1 text-slate-600 text-sm">{description}</p>
           </div>
           <div className="flex items-center gap-2">
             {uploadKey && (
               <button
                 onClick={() => { setShowUploadPanel((s) => !s); setUploadResult(null); setUploadFile(null); }}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  showUploadPanel ? "bg-blue-500/20 text-blue-300 border border-blue-500/30" : "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+                className={`rounded-xl border px-4 py-2 text-sm font-bold transition-colors ${
+                  showUploadPanel ? "bg-sky-50 text-sky-700 border-sky-200" : "app-secondary-btn"
                 }`}
-              >📤 Bulk Upload</button>
+              >Bulk Upload</button>
             )}
-            <button onClick={openCreate} className="px-4 py-2 rounded-md bg-emerald-500 text-slate-950 font-medium hover:bg-emerald-400 transition-colors">
+            <button onClick={openCreate} className="app-primary-btn px-4 py-2 rounded-xl font-black transition-colors">
               + Add
             </button>
           </div>
@@ -338,24 +339,24 @@ function CrudForm({
 
         {/* Bulk Upload Panel */}
         {uploadKey && showUploadPanel && (
-          <div className="mb-6 bg-slate-900 border border-blue-500/20 rounded-xl p-5 space-y-4">
+          <div className="app-card mb-6 rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-blue-300">📤 Bulk Upload — {title}</h2>
-              <button onClick={handleDownloadTemplate} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors">
-                ⬇️ Download Template
+              <h2 className="text-sm font-semibold text-sky-700">Bulk Upload - {title}</h2>
+              <button onClick={handleDownloadTemplate} className="app-secondary-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                Download Template
               </button>
             </div>
             <p className="text-xs text-slate-500">Download the template, fill in your data, then upload. Duplicates are skipped.</p>
             <div className="flex items-center gap-3">
               <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={(e) => handleFileChange(e.target.files[0])}
-                className="block text-sm text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600 cursor-pointer" />
+                className="block text-sm text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer" />
               <button onClick={handleUpload} disabled={!uploadFile || uploading}
-                className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-semibold text-sm disabled:opacity-40 transition-colors shrink-0">
-                {uploading ? "Uploading…" : "Upload"}
+                className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm disabled:opacity-40 transition-colors shrink-0">
+                {uploading ? "Uploading..." : "Upload"}
               </button>
             </div>
             {uploadResult && (
-              <div className="bg-slate-800/60 rounded-lg p-4 space-y-3">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
                 <div className="flex gap-6">
                   <div className="text-center"><p className="text-xl font-bold text-emerald-400">{uploadResult.inserted}</p><p className="text-xs text-slate-500">Inserted</p></div>
                   <div className="text-center"><p className="text-xl font-bold text-amber-400">{uploadResult.skipped}</p><p className="text-xs text-slate-500">Skipped</p></div>
@@ -373,7 +374,7 @@ function CrudForm({
 
         {/* ── Filter Bar ── */}
         {filterConfig.length > 0 && (
-          <div className="mb-4 flex flex-wrap items-center gap-3 p-4 bg-slate-900 border border-slate-800 rounded-xl">
+          <div className="app-card mb-4 flex flex-wrap items-center gap-3 p-4 rounded-2xl">
             <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Filter</span>
             {filterConfig.map((fc) => (
               <div key={fc.key} className="flex flex-col gap-1">
@@ -381,7 +382,7 @@ function CrudForm({
                 <select
                   value={activeFilters[fc.key] || ""}
                   onChange={(e) => setFilter(fc.key, e.target.value)}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-300 focus:outline-none focus:border-emerald-500 min-w-[130px]"
+                  className="app-input px-3 py-1.5 rounded-xl text-xs min-w-[130px]"
                 >
                   <option value="">All</option>
                   {(filterOptions[fc.key] || []).map((o) => (
@@ -391,8 +392,8 @@ function CrudForm({
               </div>
             ))}
             {hasActiveFilters && (
-              <button onClick={clearFilters} className="mt-4 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs text-slate-300 transition-colors">
-                ✕ Clear
+              <button onClick={clearFilters} className="app-secondary-btn mt-4 px-3 py-1.5 rounded-lg text-xs transition-colors">
+                Clear
               </button>
             )}
             {hasActiveFilters && (
@@ -403,16 +404,16 @@ function CrudForm({
 
         {/* Search */}
         <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)}
-          className="mb-4 px-3 py-2 rounded bg-slate-900 border border-slate-800 w-96 focus:outline-none focus:border-emerald-500 text-slate-100" />
+          className="app-input mb-4 px-4 py-2.5 rounded-2xl w-full max-w-md" />
 
         {error && (
           <div className="mb-4 px-4 py-3 rounded bg-rose-500/10 border border-rose-500/30 text-rose-400 text-sm">{error}</div>
         )}
 
         {/* Table */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-x-auto">
+        <div className="app-panel rounded-2xl overflow-x-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-slate-400 text-sm animate-pulse">Loading...</div>
+            <div className="flex items-center justify-center py-16 text-slate-500 text-sm animate-pulse">Loading...</div>
           ) : paginatedData.length === 0 ? (
             <div className="flex items-center justify-center py-16 text-slate-500 text-sm">
               {hasActiveFilters ? "No records match your filters." : "No records found. Click \"+ Add\" to create one."}
@@ -420,7 +421,7 @@ function CrudForm({
           ) : (
             <>
               <table className="w-full text-sm">
-                <thead className="text-xs uppercase text-slate-400 bg-slate-800/40">
+                <thead className="text-xs uppercase text-slate-500 bg-slate-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-slate-600 w-10">#</th>
                     {columns.map((col) => (
@@ -433,7 +434,7 @@ function CrudForm({
                 </thead>
                 <tbody>
                   {paginatedData.map((item, idx) => (
-                    <tr key={item[idKey]} className="border-t border-slate-800 hover:bg-slate-800/40 transition-colors">
+                    <tr key={item[idKey]} className="border-t border-slate-200 hover:bg-teal-50/35 transition-colors">
                       <td className="px-4 py-3 text-slate-600 text-xs">{(page - 1) * pageSize + idx + 1}</td>
                       {columns.map((col) => (
                         <td key={col.accessor} className="px-4 py-3">
@@ -445,10 +446,10 @@ function CrudForm({
                       {(updateAction || deleteAction) && (
                         <td className="px-4 py-3 text-center space-x-2">
                           {updateAction && (
-                            <button onClick={() => openEdit(item)} className="px-3 py-1 rounded text-xs bg-slate-700 hover:bg-slate-600 transition-colors">Edit</button>
+                            <button onClick={() => openEdit(item)} className="app-secondary-btn px-3 py-1 rounded-lg text-xs transition-colors">Edit</button>
                           )}
                           {deleteAction && (
-                            <button onClick={() => handleDelete(item[idKey])} className="px-3 py-1 rounded text-xs bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors">Delete</button>
+                            <button onClick={() => handleDelete(item[idKey])} className="px-3 py-1 rounded-lg text-xs bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 transition-colors">Delete</button>
                           )}
                         </td>
                       )}
@@ -463,8 +464,8 @@ function CrudForm({
 
         {/* Modal */}
         {modalOpen && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-900 p-6 rounded-xl w-full max-w-2xl border border-slate-700 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-950/35 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="app-panel p-6 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
               <h2 className="text-lg font-semibold mb-4">{isEditing ? `Edit ${title}` : `Add ${title}`}</h2>
               {formError && (
                 <div className="mb-4 px-4 py-3 rounded bg-rose-500/10 border border-rose-500/30 text-rose-400 text-sm">{formError}</div>
@@ -479,8 +480,8 @@ function CrudForm({
                   ))}
                 </div>
                 <div className="mt-6 flex justify-end gap-3">
-                  <button type="button" onClick={() => setModalOpen(false)} disabled={submitting} className="px-4 py-2 rounded text-sm text-slate-400 hover:text-slate-200 transition-colors">Cancel</button>
-                  <button type="submit" disabled={submitting} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-medium px-4 py-2 rounded text-sm transition-colors">
+                  <button type="button" onClick={() => setModalOpen(false)} disabled={submitting} className="px-4 py-2 rounded text-sm text-slate-500 hover:text-slate-900 transition-colors">Cancel</button>
+                  <button type="submit" disabled={submitting} className="app-primary-btn disabled:opacity-50 font-black px-4 py-2 rounded-xl text-sm transition-colors">
                     {submitting ? "Saving..." : isEditing ? "Update" : "Create"}
                   </button>
                 </div>
@@ -501,10 +502,10 @@ function PageBtn({ onClick, disabled, label, active }) {
       disabled={disabled}
       className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
         active
-          ? "bg-emerald-500 text-slate-950"
+          ? "bg-teal-700 text-white"
           : disabled
           ? "text-slate-700 cursor-not-allowed"
-          : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
       }`}
     >
       {label}

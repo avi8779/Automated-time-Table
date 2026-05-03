@@ -86,6 +86,28 @@ export const getAllSections = async () => {
   return rows;
 };
 
+export const getDeletedSections = async () => {
+  const [rows] = await pool.query(
+    `SELECT 
+       s.section_id,
+       s.section_name,
+       s.course_id,
+       s.semester,
+       s.strength,
+       s.batch_year,
+       s.max_slots_per_day,
+       s.status,
+       c.course_code,
+       c.course_name
+     FROM sections s
+     LEFT JOIN courses c ON c.course_id = s.course_id
+     WHERE s.is_deleted = 1
+     ORDER BY s.section_name`
+  );
+
+  return rows;
+};
+
 /* ===================== GET ONE ===================== */
 
 export const getSectionById = async (section_id) => {
@@ -135,6 +157,45 @@ export const softDeleteSection = async (section_id) => {
   const [result] = await pool.query(
     "UPDATE sections SET is_deleted = 1 WHERE section_id = ? AND is_deleted = 0",
     [section_id]
+  );
+
+  return result.affectedRows;
+};
+
+export const restoreSection = async (section_id) => {
+  const [result] = await pool.query(
+    "UPDATE sections SET is_deleted = 0 WHERE section_id = ? AND is_deleted = 1",
+    [section_id]
+  );
+
+  return result.affectedRows;
+};
+
+export const restoreSectionWithData = async (section_id, data) => {
+  const {
+    section_name,
+    course_id,
+    semester,
+    strength,
+    batch_year,
+    max_slots_per_day,
+    status
+  } = data;
+
+  const [result] = await pool.query(
+    `UPDATE sections
+     SET section_name = ?, course_id = ?, semester = ?, strength = ?, batch_year = ?, max_slots_per_day = ?, status = ?, is_deleted = 0
+     WHERE section_id = ? AND is_deleted = 1`,
+    [
+      section_name,
+      course_id,
+      semester,
+      strength,
+      batch_year,
+      max_slots_per_day ?? 6,
+      status,
+      section_id
+    ]
   );
 
   return result.affectedRows;

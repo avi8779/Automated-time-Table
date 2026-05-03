@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   generateTimetableController,
+  sendTimetableEmailController,
   getTimetableBySection,
   getTimetableByTeacher,
   getAllTimetablesController,
@@ -12,6 +13,7 @@ const router = Router();
 
 // Admin only — generate
 router.post("/generate",             restrictTo("admin"), generateTimetableController);
+router.post("/send-timetable-email", restrictTo("admin"), sendTimetableEmailController);
 
 // All authenticated roles can read
 router.get("/sections",              getSectionsWithDepartmentController);

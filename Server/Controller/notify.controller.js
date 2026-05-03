@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import { pool } from "../config/dbConn.js";
-import { sendCredentialsEmail } from "../Services/email.service.js";
+import { sendAccountCredentialsEmail } from "../Services/email.service.js";
 
 const LOGIN_URL = process.env.FRONTEND_URL || "http://localhost:5173/login";
 
@@ -59,8 +59,27 @@ export const sendCredentials = async (req, res) => {
         results.failed.push({ name: r.name, reason: "No email address" });
         continue;
       }
+
+      if (!r.tempPassword || r.tempPassword.length < 6) {
+        results.failed.push({ name: r.name, reason: "Password must be at least 6 characters" });
+        continue;
+      }
+
       try {
-        await sendCredentialsEmail({
+        const hashed = await bcrypt.hash(r.tempPassword, 10);
+        const table = r.role === "teacher" ? "teachers" : "students";
+        const idCol = r.role === "teacher" ? "teacher_id" : "student_id";
+        const [updateResult] = await pool.query(
+          `UPDATE ${table} SET password = ?, must_change_password = 1 WHERE ${idCol} = ? AND is_deleted = 0`,
+          [hashed, r.id]
+        );
+
+        if (!updateResult.affectedRows) {
+          results.failed.push({ name: r.name, reason: "User not found" });
+          continue;
+        }
+
+        await sendAccountCredentialsEmail({
           to:          r.email,
           name:        r.name,
           role:        r.role,

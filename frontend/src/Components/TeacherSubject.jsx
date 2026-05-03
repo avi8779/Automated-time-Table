@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "../Helper/axiosInstance";
 import { toast } from "react-toastify";
 
-const SELECT_CLS = "w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 disabled:opacity-40";
+const SELECT_CLS = "app-input w-full px-3 py-2 rounded-lg text-sm disabled:opacity-40";
 
 function TeacherSubject() {
   const [teachers,    setTeachers]    = useState([]);
@@ -56,6 +56,10 @@ function TeacherSubject() {
 
   useEffect(() => { loadAllMappings(); }, [loadAllMappings]);
 
+  const filteredTeachers = form.department_id
+    ? teachers.filter((t) => String(t.depart_id) === String(form.department_id))
+    : teachers;
+
   // Filter subjects by selected department
   const filteredSubjects = form.department_id
     ? subjects.filter((s) => {
@@ -68,7 +72,12 @@ function TeacherSubject() {
   // Filter sections by subject's course (via semester match is complex — show all for now)
   const filteredSections = sections;
 
-  const setField = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+  const setField = (key, val) => setForm((f) => {
+    if (key === "department_id") {
+      return { ...f, department_id: val, teacher_id: "", subject_id: "", section_id: "" };
+    }
+    return { ...f, [key]: val };
+  });
 
   const handleAssign = async (e) => {
     e.preventDefault();
@@ -121,19 +130,19 @@ function TeacherSubject() {
   const selectedSectionName = sections.find((s) => String(s.section_id) === String(form.section_id))?.section_name;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="app-page">
+      <div className="app-container max-w-6xl space-y-8">
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Teacher → Subject → Section</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <h1 className="text-2xl font-black text-slate-950">Teacher - Subject - Section</h1>
+          <p className="text-slate-600 text-sm mt-1">
             Assign which teacher teaches which subject to which section
           </p>
         </div>
 
         {/* ── Assignment Form ── */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <div className="app-panel rounded-2xl p-6">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-5">
             New Assignment
           </h2>
@@ -141,16 +150,7 @@ function TeacherSubject() {
           <form onSubmit={handleAssign}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
-              {/* Teacher */}
-              <div>
-                <label className="text-xs text-slate-400 block mb-1.5">Teacher <span className="text-red-400">*</span></label>
-                <select value={form.teacher_id} onChange={(e) => setField("teacher_id", e.target.value)} className={SELECT_CLS}>
-                  <option value="">Select teacher…</option>
-                  {teachers.map((t) => (
-                    <option key={t.teacher_id} value={t.teacher_id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
+              
 
               {/* Department */}
               <div>
@@ -159,6 +159,20 @@ function TeacherSubject() {
                   <option value="">All departments</option>
                   {departments.map((d) => (
                     <option key={d.depart_id} value={d.depart_id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Teacher */}
+              <div>
+                <label className="text-xs text-slate-400 block mb-1.5">Teacher <span className="text-red-400">*</span></label>
+                <select value={form.teacher_id} onChange={(e) => setField("teacher_id", e.target.value)} className={SELECT_CLS}>
+                  <option value="">Select teacher…</option>
+                  {form.department_id && filteredTeachers.length === 0 && (
+                    <option value="" disabled>No teachers in selected department</option>
+                  )}
+                  {filteredTeachers.map((t) => (
+                    <option key={t.teacher_id} value={t.teacher_id}>{t.name}</option>
                   ))}
                 </select>
               </div>
@@ -226,16 +240,16 @@ function TeacherSubject() {
               <button
                 type="submit"
                 disabled={assigning}
-                className="ml-auto px-6 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-sm transition-colors disabled:opacity-50"
+                className="app-primary-btn ml-auto px-6 py-2 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50"
               >
-                {assigning ? "Assigning…" : "Assign"}
+                {assigning ? "Assigning..." : "Assign"}
               </button>
             </div>
           </form>
         </div>
 
         {/* ── Mappings Table ── */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <div className="app-panel rounded-2xl p-6">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
               All Assignments
@@ -249,7 +263,7 @@ function TeacherSubject() {
               <select
                 value={filterTeacher}
                 onChange={(e) => setFilterTeacher(e.target.value)}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-300 focus:outline-none focus:border-emerald-500"
+                className="app-input px-3 py-1.5 rounded-lg text-xs"
               >
                 <option value="">All teachers</option>
                 {teachers.map((t) => (
@@ -259,7 +273,7 @@ function TeacherSubject() {
               <select
                 value={filterSection}
                 onChange={(e) => setFilterSection(e.target.value)}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-300 focus:outline-none focus:border-emerald-500"
+                className="app-input px-3 py-1.5 rounded-lg text-xs"
               >
                 <option value="">All sections</option>
                 {sections.map((s) => (
@@ -282,9 +296,9 @@ function TeacherSubject() {
           ) : visibleMappings.length === 0 ? (
             <div className="py-12 text-center text-slate-500 text-sm">No assignments found.</div>
           ) : (
-            <div className="rounded-lg overflow-hidden border border-slate-800 overflow-x-auto">
+            <div className="rounded-lg overflow-hidden border border-slate-200 overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-xs uppercase text-slate-400 bg-slate-800/50">
+                <thead className="text-xs uppercase text-slate-500 bg-slate-50">
                   <tr>
                     <th className="px-4 py-3 text-left">Teacher</th>
                     <th className="px-4 py-3 text-left">Subject</th>
@@ -299,7 +313,7 @@ function TeacherSubject() {
                   {visibleMappings.map((m) => (
                     <tr
                       key={`${m.teacher_id}-${m.subject_id}-${m.section_id ?? "null"}`}
-                      className="border-t border-slate-800 hover:bg-slate-800/40 transition-colors"
+                      className="border-t border-slate-200 hover:bg-teal-50/35 transition-colors"
                     >
                       <td className="px-4 py-3 font-medium text-slate-200">{m.teacher_name}</td>
                       <td className="px-4 py-3">

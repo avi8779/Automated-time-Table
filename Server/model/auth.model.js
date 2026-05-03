@@ -41,17 +41,17 @@ export const findStudentByRollNumber = async (roll_number) => {
 };
 
 export const createStudent = async (data) => {
-  const { roll_number, password, name, section_id } = data;
+  const { roll_number, password, name, email, section_id } = data;
   const [result] = await pool.query(
-    "INSERT INTO students (roll_number, password, name, section_id) VALUES (?,?,?,?)",
-    [roll_number, password, name, section_id]
+    "INSERT INTO students (roll_number, password, name, email, section_id) VALUES (?,?,?,?,?)",
+    [roll_number, password, name, email, section_id]
   );
   return result.insertId;
 };
 
 export const getAllStudents = async () => {
   const [rows] = await pool.query(
-    `SELECT s.student_id, s.roll_number, s.name,
+    `SELECT s.student_id, s.roll_number, s.name, s.email,
             sec.section_name, sec.semester, c.course_name
      FROM students s
      JOIN sections sec ON sec.section_id = s.section_id

@@ -35,31 +35,31 @@ function SlotCard({ row }) {
   return (
     <div
       className={`
-        rounded-md p-2 h-full flex flex-col justify-between text-[11px] leading-tight
-        border transition-opacity hover:opacity-80 cursor-default
+        h-full rounded-xl p-2.5 flex flex-col justify-between text-[11px] leading-tight
+        border transition hover:-translate-y-0.5 cursor-default shadow-sm
         ${isLab
-          ? "bg-violet-50 border-violet-300 dark:bg-violet-950/60 dark:border-violet-700"
-          : "bg-emerald-50 border-emerald-300 dark:bg-emerald-950/60 dark:border-emerald-700"}
+          ? "bg-violet-400/10 border-violet-400/25"
+          : "bg-teal-400/10 border-teal-400/25"}
       `}
     >
       <p
         className={`
           font-semibold line-clamp-2 text-[12px]
-          ${isLab ? "text-violet-900 dark:text-violet-200" : "text-emerald-900 dark:text-emerald-200"}
+          ${isLab ? "text-violet-100" : "text-teal-100"}
         `}
       >
         {row.subject_name}
       </p>
       <div className="flex flex-wrap items-center gap-1 mt-1">
         {isLab && (
-          <span className="bg-violet-200 dark:bg-violet-800 text-violet-800 dark:text-violet-200 text-[10px] px-1.5 py-0.5 rounded-full font-medium">
+          <span className="bg-violet-400/15 text-violet-200 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
             Lab
           </span>
         )}
         <span
           className={`
             font-medium
-            ${isLab ? "text-violet-700 dark:text-violet-300" : "text-emerald-700 dark:text-emerald-300"}
+            ${isLab ? "text-violet-300" : "text-teal-300"}
           `}
         >
           {row.room_no}
@@ -68,7 +68,7 @@ function SlotCard({ row }) {
       <p
         className={`
           truncate
-          ${isLab ? "text-violet-600 dark:text-violet-400" : "text-emerald-600 dark:text-emerald-400"}
+          ${isLab ? "text-violet-300/80" : "text-teal-300/80"}
         `}
       >
         {row.teacher_name}
@@ -103,11 +103,16 @@ function Timetable() {
   const [sections,        setSections]        = useState([]);
   const [selectedDept,    setSelectedDept]    = useState("");
   const [selectedSection, setSelectedSection] = useState("");
+  const [generateScope,   setGenerateScope]   = useState("all");
+  const [generateDept,    setGenerateDept]    = useState("");
+  const [generateSection, setGenerateSection] = useState("");
   const [timetableData,   setTimetableData]   = useState([]);
   const [allSlots,        setAllSlots]        = useState([]);
   const [generating,      setGenerating]      = useState(false);
+  const [sendingEmail,    setSendingEmail]    = useState(false);
   const [loadingTT,       setLoadingTT]       = useState(false);
   const [stats,           setStats]           = useState(null);
+  const [lastGenerationPayload, setLastGenerationPayload] = useState(null);
 
   // Load sections + time slot metadata on mount
   useEffect(() => {
@@ -136,10 +141,28 @@ function Timetable() {
     return sections.filter((s) => String(s.depart_id) === String(selectedDept));
   }, [sections, selectedDept]);
 
+  const generationSections = useMemo(() => {
+    if (!generateDept) return [];
+    return sections.filter((s) => String(s.depart_id) === String(generateDept));
+  }, [sections, generateDept]);
+
   useEffect(() => {
-    setSelectedSection("");
-    setTimetableData([]);
-  }, [selectedDept]);
+    if (!selectedDept) {
+      setSelectedSection("");
+      setTimetableData([]);
+      return;
+    }
+
+    const selected = sections.find((s) => String(s.section_id) === String(selectedSection));
+    if (!selected || String(selected.depart_id) !== String(selectedDept)) {
+      setSelectedSection("");
+      setTimetableData([]);
+    }
+  }, [selectedDept, selectedSection, sections]);
+
+  useEffect(() => {
+    setGenerateSection("");
+  }, [generateDept]);
 
   const fetchTimetable = useCallback(async (sectionId) => {
     if (!sectionId) { setTimetableData([]); return; }
@@ -160,19 +183,67 @@ function Timetable() {
   }, [selectedSection, fetchTimetable]);
 
   const handleGenerate = async () => {
-    if (!window.confirm("Regenerate the entire timetable? This will clear all existing data.")) return;
+    const payload = { scope: generateScope };
+    let label = "all departments";
+
+    if (generateScope === "department") {
+      if (!generateDept) {
+        toast.error("Choose a department first");
+        return;
+      }
+      payload.department_id = generateDept;
+      label = departments.find((d) => String(d.depart_id) === String(generateDept))?.name || "selected department";
+    }
+
+    if (generateScope === "section") {
+      if (!generateSection) {
+        toast.error("Choose a section first");
+        return;
+      }
+      payload.section_id = generateSection;
+      const section = sections.find((s) => String(s.section_id) === String(generateSection));
+      label = section ? `${section.section_name} (${section.department_name})` : "selected section";
+    }
+
+    if (!window.confirm(`Generate timetable for ${label}? Existing timetable rows for this selection will be replaced.`)) return;
     setGenerating(true);
     setStats(null);
     try {
-      const res = await axiosInstance.post("/timetables/generate");
-      const { message, assignedCount, unassigned } = res.data;
+      const res = await axiosInstance.post("/timetables/generate", payload);
+      const { message, assignedCount, unassigned, assignmentIssues, debugInfo, email } = res.data;
       toast.success(message || "Timetable generated!");
-      setStats({ assignedCount, unassigned });
-      await fetchTimetable(selectedSection);
+      if (email?.blocked) toast.warning("Email button is disabled until timetable issues are fixed");
+      setStats({ assignedCount, unassigned, assignmentIssues, debugInfo, email });
+      setLastGenerationPayload(payload);
+      if (generateScope === "section") {
+        const section = sections.find((s) => String(s.section_id) === String(generateSection));
+        if (section) setSelectedDept(String(section.depart_id));
+        setSelectedSection(String(generateSection));
+        await fetchTimetable(generateSection);
+      } else {
+        await fetchTimetable(selectedSection);
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || "Generation failed");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!lastGenerationPayload) {
+      toast.error("Generate a timetable first");
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      const res = await axiosInstance.post("/send-timetable-email", lastGenerationPayload);
+      toast.success(res.data?.message || "Emails sent successfully");
+      setStats((prev) => prev ? { ...prev, email: res.data.email } : prev);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Email failed");
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -186,14 +257,14 @@ function Timetable() {
     return map;
   }, [timetableData]);
 
-  // Active days (days that have at least one class)
+  // Show all configured timetable days, including Saturday even when empty.
   const activeDays = DAYS_ORDER.filter((d) =>
-    timetableData.some((r) => r.day === d)
+    timetableData.some((r) => r.day === d) || allSlots.some((slot) => slot.day === d && !slot.is_break)
   );
 
   // Build slot-time axis from the canonical time_slots table when available.
   // When falling back to timetableData, only include start_times that appear
-  // in MORE THAN ONE day — this prevents a single-day outlier slot from
+  // in MORE THAN ONE day - this prevents a single-day outlier slot from
   // creating a mostly-empty row across the whole grid.
   const slotRows = useMemo(() => {
     if (allSlots.length > 0) {
@@ -246,7 +317,7 @@ function Timetable() {
     return (byDay[day] || []).filter((r) => {
       if (r.start_time === startTime) return true;
       // Attach orphan slot: if this row's start_time is NOT in slotRows at all,
-      // it belongs to the nearest slotRow — check if startTime is the closest.
+      // it belongs to the nearest slotRow - check if startTime is the closest.
       const inGrid = slotRows.some((s) => s.start_time === r.start_time);
       if (inGrid) return false;
       // Find which slotRow is closest in time to r.start_time
@@ -268,19 +339,19 @@ function Timetable() {
   const hasData = timetableData.length > 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
+    <div className="app-page">
+      <div className="app-container max-w-7xl space-y-4">
 
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-slate-100 tracking-tight">Timetable</h1>
-            <p className="text-slate-500 text-xs mt-0.5">Weekly schedule grid</p>
+            <h1 className="text-2xl font-black text-slate-950 tracking-tight">Timetable</h1>
+            <p className="text-slate-400 text-xs mt-0.5">Weekly schedule grid</p>
           </div>
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-sm transition-colors disabled:opacity-50 shrink-0"
+            className="app-primary-btn flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 shrink-0"
           >
             {generating ? (
               <>
@@ -288,7 +359,7 @@ function Timetable() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
-                Generating…
+                Generating...
               </>
             ) : (
               <>
@@ -303,20 +374,143 @@ function Timetable() {
 
         {/* ── Stats ── */}
         {stats && (
-          <div className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-3 text-xs space-y-1">
-            <p className="text-emerald-400 font-semibold">
-              {stats.assignedCount} slot{stats.assignedCount !== 1 ? "s" : ""} assigned
-            </p>
+          <div className="app-panel rounded-2xl px-4 py-3 text-xs space-y-1">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <p className="text-emerald-400 font-semibold">
+                {stats.assignedCount} slot{stats.assignedCount !== 1 ? "s" : ""} assigned
+              </p>
+              <button
+                onClick={handleSendEmail}
+                disabled={sendingEmail || !lastGenerationPayload || stats.email?.blocked}
+                className="app-primary-btn px-3 py-1.5 rounded-lg font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {sendingEmail ? "Sending..." : "Send Email"}
+              </button>
+            </div>
             {stats.unassigned?.length > 0 && (
               <ul className="list-disc list-inside space-y-0.5 text-amber-400">
                 {stats.unassigned.map((msg, i) => <li key={i}>{msg}</li>)}
               </ul>
             )}
+            {stats.debugInfo?.unassignedSubjects?.length > 0 && (
+              <div className="text-amber-300">
+                <p className="font-semibold">Unassigned subjects:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {stats.debugInfo.unassignedSubjects.map((item, i) => (
+                    <li key={i}>{item.section}: {item.subject} - {item.remaining} hour(s) left ({item.reason})</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {stats.debugInfo?.emptySlots?.length > 0 && (
+              <div className="text-slate-400">
+                <p className="font-semibold">Empty slots:</p>
+                <ul className="list-disc list-inside space-y-0.5 max-h-24 overflow-auto">
+                  {stats.debugInfo.emptySlots.slice(0, 30).map((item, i) => (
+                    <li key={i}>{item.section}: {item.day} slot {item.slot}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {stats.debugInfo?.failureReasons?.length > 0 && (
+              <div className="text-slate-400">
+                <p className="font-semibold">Failure reasons:</p>
+                <ul className="list-disc list-inside space-y-0.5 max-h-24 overflow-auto">
+                  {stats.debugInfo.failureReasons.slice(0, 20).map((msg, i) => <li key={i}>{msg}</li>)}
+                </ul>
+              </div>
+            )}
+            {stats.assignmentIssues?.length > 0 && (
+              <div className="text-rose-400">
+                <p className="font-semibold">Emails blocked because these classes were not fully assigned:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {stats.assignmentIssues.map((msg, i) => <li key={i}>{msg}</li>)}
+                </ul>
+              </div>
+            )}
+            {stats.email && (
+              <div className="pt-1 text-slate-400">
+                {stats.email.blocked ? (
+                  <div className="text-rose-400">
+                    <p className="font-semibold">Send Email is disabled because the timetable has assignment issues.</p>
+                    {stats.email.issues?.length > 0 && (
+                      <ul className="list-disc list-inside space-y-0.5">
+                        {stats.email.issues.map((msg, i) => <li key={i}>{msg}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                ) : (
+                  <p>
+                    Emails sent: {stats.email.sent?.length || 0}
+                    {stats.email.skipped?.length ? ` - skipped: ${stats.email.skipped.length}` : ""}
+                    {stats.email.failed?.length ? ` - failed: ${stats.email.failed.length}` : ""}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {/* ── Selectors ── */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="app-panel rounded-2xl p-4 space-y-3">
+          <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+            <div className="lg:w-56">
+              <label className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 block mb-1.5">
+                Generate for
+              </label>
+              <select
+                value={generateScope}
+                onChange={(e) => setGenerateScope(e.target.value)}
+                className="app-input w-full px-3 py-2 rounded-lg text-sm"
+              >
+                <option value="all">Whole timetable</option>
+                <option value="department">Whole department</option>
+                <option value="section">Single section</option>
+              </select>
+            </div>
+
+            {(generateScope === "department" || generateScope === "section") && (
+              <div className="lg:w-72">
+                <label className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 block mb-1.5">
+                  Department
+                </label>
+                <select
+                  value={generateDept}
+                  onChange={(e) => setGenerateDept(e.target.value)}
+                  className="app-input w-full px-3 py-2 rounded-lg text-sm"
+                >
+                  <option value="">- choose department -</option>
+                  {departments.map((d) => (
+                    <option key={d.depart_id} value={d.depart_id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {generateScope === "section" && (
+              <div className="lg:w-72">
+                <label className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 block mb-1.5">
+                  Section
+                </label>
+                <select
+                  value={generateSection}
+                  onChange={(e) => setGenerateSection(e.target.value)}
+                  disabled={!generateDept}
+                  className="app-input w-full px-3 py-2 rounded-lg text-sm disabled:opacity-40"
+                >
+                  <option value="">- choose section -</option>
+                  {generationSections.map((s) => (
+                    <option key={s.section_id} value={s.section_id}>
+                      {s.section_name} - Sem {s.semester} ({s.batch_year})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="app-panel rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 block mb-1.5">
               1. Department
@@ -324,9 +518,9 @@ function Timetable() {
             <select
               value={selectedDept}
               onChange={(e) => setSelectedDept(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+              className="app-input w-full px-3 py-2 rounded-lg text-sm"
             >
-              <option value="">— choose department —</option>
+              <option value="">- choose department -</option>
               {departments.map((d) => (
                 <option key={d.depart_id} value={d.depart_id}>{d.name}</option>
               ))}
@@ -340,12 +534,12 @@ function Timetable() {
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}
               disabled={!selectedDept}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 disabled:opacity-40"
+              className="app-input w-full px-3 py-2 rounded-lg text-sm disabled:opacity-40"
             >
-              <option value="">— choose section —</option>
+              <option value="">- choose section -</option>
               {filteredSections.map((s) => (
                 <option key={s.section_id} value={s.section_id}>
-                  {s.section_name} · Sem {s.semester} ({s.batch_year})
+                  {s.section_name} - Sem {s.semester} ({s.batch_year})
                 </option>
               ))}
             </select>
@@ -361,7 +555,7 @@ function Timetable() {
             <span className="text-[11px] text-slate-500">{selectedSectionObj.course_name}</span>
             {hasData && (
               <span className="text-[11px] text-slate-500">
-                · {timetableData.length} total classes
+                - {timetableData.length} total classes
               </span>
             )}
           </div>
@@ -371,20 +565,20 @@ function Timetable() {
         {selectedSection && (
           loadingTT ? (
             <div className="py-16 text-center text-slate-500 text-sm animate-pulse">
-              Loading…
+              Loading...
             </div>
           ) : !hasData ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl py-16 text-center">
+            <div className="app-panel rounded-2xl py-16 text-center">
               <p className="text-slate-400 text-sm">No timetable for this section yet.</p>
-              <p className="text-slate-600 text-xs mt-1">Click Generate to create one.</p>
+              <p className="text-slate-500 text-xs mt-1">Click Generate to create one.</p>
             </div>
           ) : (
             <div>
               {/* Section heading above grid */}
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold text-slate-300">
-                  <span className="text-emerald-400">{selectedSectionObj?.section_name}</span>
-                  <span className="text-slate-500 font-normal ml-1.5">— Sem {selectedSectionObj?.semester}</span>
+                  <span className="text-teal-700">{selectedSectionObj?.section_name}</span>
+                  <span className="text-slate-500 font-normal ml-1.5">- Sem {selectedSectionObj?.semester}</span>
                 </p>
                 {/* Legend */}
                 <div className="flex items-center gap-3">
@@ -450,7 +644,7 @@ function Timetable() {
                             {formatTime(slot.start_time)}
                           </p>
                           <p className="text-[10px] text-slate-600 mt-0.5">
-                            {formatTime(slot.start_time)}–{formatTime(slot.end_time)}
+                            {formatTime(slot.start_time)}-{formatTime(slot.end_time)}
                           </p>
                           {slot.is_break ? (
                             <span className="text-[9px] uppercase tracking-widest text-slate-600 font-medium mt-0.5 block">
@@ -471,7 +665,7 @@ function Timetable() {
                                   className="h-[62px] flex items-center justify-center text-[10px] uppercase tracking-widest text-slate-700"
                                   style={{ background: "repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(255,255,255,0.015) 4px,rgba(255,255,255,0.015) 5px)" }}
                                 >
-                                  —
+                                  -
                                 </div>
                               </td>
                             );
