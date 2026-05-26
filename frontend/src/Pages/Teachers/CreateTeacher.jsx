@@ -40,7 +40,7 @@ function CreateTeacher() {
       validate={validateTeacher}
       transform={transformTeacher}
       columns={[
-        { header: "Code",           accessor: "teacher_code"       },
+        // { header: "Code",           accessor: "teacher_code"       },
         { header: "Name",           accessor: "name"               },
         { header: "Email",          accessor: "email"              },
         { header: "Department",     accessor: "department_name"    },
