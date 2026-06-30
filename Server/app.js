@@ -74,7 +74,13 @@ app.use("/api/v1/notify", notifyRoutes);
 app.use("/api/v1/timetables", protect, timetablesRoutes);
 app.post("/api/v1/send-timetable-email", protect, restrictTo("admin"), sendTimetableEmailController);
 
-/* ── HEALTH CHECK ── */
+/* ── resoponse checer ── */
+app.get("/", (_req, res) => {
+  res.json({
+    success: true,
+    message: "Automated Timetable API is running 🚀",
+  });
+});
 app.get("/ping", (_req, res) => res.json({ status: "ok" }));
 
 /* ── 404 ── */
