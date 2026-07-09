@@ -27,10 +27,11 @@ const app = express();
 
 /* ── CORS ── */
 const allowedOrigins = [
-  process.env.FRONTEND_URL || "http://localhost:5173",
+  process.env.FRONTEND_URL,
+  "https://automated-time-table.vercel.app",
   "http://localhost:5173",
   "http://localhost:3000",
-];
+].filter(Boolean);
 
 app.use(
   cors({
